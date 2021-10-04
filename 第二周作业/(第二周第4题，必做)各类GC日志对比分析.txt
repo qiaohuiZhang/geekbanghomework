@@ -1,0 +1,1102 @@
+##串行GC打印日志分析
+
+（一）、串行GC，堆内存配置-Xms512m -Xmx512m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、观察第一次GC可以看出，young区在GC前是136.5M，GC后大约是17M，减少了119.5M，
+而整个堆内存的对象在GC前是136.5M，GC后约是42M，减少了约94.5M，young区减少的对象与整个堆减少的对象之差为25M（119.5-94.5）。
+产生这种差异，是因为这25M其实是从young区晋升到了old区。
+2、在经历了17次youngGC后，最后几次GC的花费的时间明显变长，并且连续进行了2次fullGC，可以看到这两次fullGC，old区的GC回收并没有什么效果，old区的
+对象数量变化不大。不过整个堆得回收变化还是有的，应该是young区的对象被回收了。
+这种情况下，old区会持续处于充盈状态，young区将无法继续晋升，一旦young区新生对象的速度比回收速度快，并保持一段时间，那么可能会引起内存
+溢出的问题，若要解决这个问题，可以修改相应参数，增加堆内存的大小，即增加“蓄水池”的大小，可以容纳更多的对象；
+
+（二）、串行GC，堆内存配置-Xms1g -Xmx1g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、可以看到内存设定增大到1个g后，GC次数有明显的减少，GC暂停的时间相对较长。
+2、第10次出现了fullGC，可以看到，old区从661M减少到363，减少了约298M对象，而整个堆内存从968M减少到363M，减少了605M，那么整个堆减少的对象与old区减少的对象相比，多减少了307M，
+而整个young区的大小刚好是307M，也就是整个young区在这次fullGC时被清空了。
+
+（三）、串行GC，堆内存配置-Xms256m -Xmx256m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、可以看到内存设定到256M之后，GC的频率显著提高，几次youngGC之后就进行了一次fullGC，并且连续三十多次fullGC后内存溢出，报了OOM；
+2、内存太小，对象生成速度又快，导致内存很快被填满，回收的速度赶不上对象生成的速度，所以内容溢出的风险很大。解决办法很无脑，增加内存；
+
+（四）、以上为串行GC，堆内存配置-Xms4g -Xmx4g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、4g内存下，串行GC的频率非常低，但每次GC暂停时间也长了很多，GC效率较低；
+2、由于内存充足，old区的对象没有办法把池子填满，所以并没有触发fullGC；
+------------------------------------------朴实分割线------------------------------------------------
+
+##并行GC打印日志分析
+（一）、并行GC，堆内存配置-Xms512m -Xmx512m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、观察并行GC的日志，可以看出，并行GC每次youngGC的时间相比于串行GC所花费的时间更短，这是并行GC回收对象的效率优于串行；
+2、受限于内存较小，并行GC的回收频率较高，同时到了程序运行尾声，晋升进入old区的对象数量维持在较高水位，后续fullGC的效果不明显，所以连续触发了fullGC，因此内存中的对象水
+会比较稳定得维持在一定水平，但GC的频率来看，这种状态并不健康，建议扩大内存进行改善；
+
+（二）、并行GC，堆内存配置-Xms1g -Xmx1g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、可以看到内存设定增大到1个g后，GC次数有明显的减少，GC暂停的时间相对较长。
+2、内存1g下，并行GC和串行GC并没有明显的差异，因为内存足够大，所以GC的次数不多，内存余量充足，程序运行较为健康。
+
+（三）、并行GC，堆内存配置-Xms256m -Xmx256m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、可以看到内存设定到256M之后，GC的频率显著提高，相比串行GC，并行GC的效率体现得也较高，GC花费时间相对较短；
+2、与串行GC一样，由于内存的过小的局限，导致程序运行尾声GC的频率增加，并连续触发fullGC, 但“水池”盈满并没有多少改善，后面终于溢出报错。
+
+（四）、并行GC，堆内存配置-Xms4g -Xmx4g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、4g内存下，并行GC的频率也非常低，GC的频率比串行GC高一些，但每次GC暂停时间明显短了很多，这说明并行GC的效率比串行GC要好上不少。
+2、同样由于内存充足，old区的对象没有办法把内存“池子”填满，所以并没有触发fullGC；
+------------------------------------------朴实分割线------------------------------------------------
+
+##CMS GC打印日志分析
+（一）、CMS GC，堆内存配置-Xms512m -Xmx512m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、观察CMS GC 日志，在CMS GC的6个阶段中，有2个阶段“初始标记”和“最终标记”需要GC暂停，从日志可以看出，这两次的暂停时间都非常短暂，加起来比并行GC的暂停时间更短，
+但CMS GC是分两次暂停，所以CMS GC 暂停的次数要比并行GC要多。
+
+（二）、CMS GC，堆内存配置-Xms1g -Xmx1g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、同样的内存设定增大到1个g后，GC次数有明显的减少，GC暂停的时间相对较长；
+2、内存1g下，与并行GC、串行GC并没有明显的差异，因为内存足够大，所以GC的次数不多，内存余量充足，程序运行较为健康；
+3、同样的，暂停次数较多，暂停时间较短；
+
+（三）、CMS GC，堆内存配置-Xms256m -Xmx256m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、可以看到内存设定到256M之后，GC的频率显著提高，相比串行GC，CMS的GC效率体现得也较高，GC花费时间相对较短；
+2、与串、并行GC一样，由于内存的过小的局限，导致程序运行尾声GC的频率增加，并连续触发fullGC，但不同的是CMS GC并没有内存溢出；
+3、这说明更高的GC频率，牺牲了吞吐量，但是可以获得更低的延迟；
+
+（四）、CMS GC，堆内存配置-Xms4g -Xmx4g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、4g内存下，CMS GC的频率同样非常低，GC的频率比并行GC高一些，GC暂停时间也差不多，GC效率上也是比较高的。
+2、同样由于内存充足，所以并没有触发fullGC；
+
+------------------------------------------朴实分割线------------------------------------------------
+##G1 GC打印日志分析
+
+（一）、G1 GC，堆内存配置-Xms512m -Xmx512m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、观察G1 GC 日志，G1与CMS GC的流程较为相似，有较高的GC暂停频率和短暂的暂停时间的特点。
+
+（二）、G1 GC，堆内存配置-Xms1g -Xmx1g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、内存1g下，与CMS较为相似，因为内存足够大，所以GC的次数不多，内存余量充足，程序运行较为健康；
+2、同样的，暂停次数较多，暂停时间较短；
+
+（三）、G1 GC，堆内存配置-Xms256m -Xmx256m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、可以看到内存设定到256M之后，GC的频率显著提高，同样效率也较高，GC花费时间相对较短；
+2、由于内存的过小的局限，导致程序运行尾声GC的频率增加，并连续触发fullGC, 后续GC的效果甚微，后面终于溢出报错。
+
+（四）、G1 GC，堆内存配置-Xms4g -Xmx4g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、4g内存下，G1 GC的频率同样不高，但是相比CMS和并行GC，频率要高上不少，同时暂停时间相对短很多，说明效率上也比较高。
+2、同样由于内存充足，所以并没有触发fullGC；
+3、可以看出，如果内存比较大，同时对于GC时间的均匀分布上有偏好，可以选择G1 GC；
+
+------------------------------------------朴实分割线------------------------------------------------
+
+以上为总结归总，日志信息详情如下：
+
+##串行GC打印日志分析
+
+java -XX:+UseSerialGC -Xms512m -Xmx512m -XX:+PrintGCDetails GCLogAnalysis
+
+Java HotSpot(TM) 64-Bit Server VM (25.301-b09) for windows-amd64 JRE (1.8.0_301-b09), built on Jun  9 2021 06:46:21 by "java_re" with MS VC++ 15.9 (VS2017)
+Memory: 4k page, physical 16581812k(10526472k free), swap 17630388k(8691416k free)
+CommandLine flags: -XX:InitialHeapSize=536870912 -XX:MaxHeapSize=536870912 -XX:+PrintGC -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+UseCompressedClassPointers -XX:+UseCompressedOops -XX:-UseLargePagesIndividualAllocation -XX:+UseSerialGC 
+0.178: [GC (Allocation Failure) 0.178: [DefNew: 139776K->17472K(157248K), 0.0225040 secs] 139776K->43095K(506816K), 0.0226940 secs] [Times: user=0.00 sys=0.02, real=0.02 secs] 
+0.221: [GC (Allocation Failure) 0.221: [DefNew: 157248K->17471K(157248K), 0.0317068 secs] 182871K->84550K(506816K), 0.0318095 secs] [Times: user=0.00 sys=0.03, real=0.03 secs] 
+0.271: [GC (Allocation Failure) 0.271: [DefNew: 157247K->17467K(157248K), 0.0245867 secs] 224326K->126641K(506816K), 0.0246780 secs] [Times: user=0.02 sys=0.00, real=0.03 secs] 
+0.315: [GC (Allocation Failure) 0.315: [DefNew: 157231K->17471K(157248K), 0.0225840 secs] 266405K->165159K(506816K), 0.0226747 secs] [Times: user=0.02 sys=0.02, real=0.02 secs] 
+0.356: [GC (Allocation Failure) 0.356: [DefNew: 157247K->17469K(157248K), 0.0258526 secs] 304935K->209685K(506816K), 0.0259503 secs] [Times: user=0.00 sys=0.03, real=0.03 secs] 
+0.399: [GC (Allocation Failure) 0.399: [DefNew: 157245K->17471K(157248K), 0.0236413 secs] 349461K->249844K(506816K), 0.0237334 secs] [Times: user=0.02 sys=0.00, real=0.02 secs] 
+0.440: [GC (Allocation Failure) 0.440: [DefNew: 157247K->17469K(157248K), 0.0245365 secs] 389620K->291758K(506816K), 0.0246282 secs] [Times: user=0.00 sys=0.03, real=0.03 secs] 
+0.482: [GC (Allocation Failure) 0.482: [DefNew: 157245K->17467K(157248K), 0.0263473 secs] 431534K->337371K(506816K), 0.0264383 secs] [Times: user=0.02 sys=0.02, real=0.03 secs] 
+0.526: [GC (Allocation Failure) 0.526: [DefNew: 156680K->156680K(157248K), 0.0000285 secs]0.526: [Tenured: 319903K->269085K(349568K), 0.0352015 secs] 476584K->269085K(506816K), [Metaspace: 2638K->2638K(1056768K)], 0.0353567 secs] [Times: user=0.03 sys=0.00, real=0.04 secs] 
+0.581: [GC (Allocation Failure) 0.581: [DefNew: 139776K->17471K(157248K), 0.0059871 secs] 408861K->309892K(506816K), 0.0060707 secs] [Times: user=0.02 sys=0.00, real=0.01 secs] 
+0.606: [GC (Allocation Failure) 0.606: [DefNew: 157247K->17470K(157248K), 0.0133228 secs] 449668K->349633K(506816K), 0.0134133 secs] [Times: user=0.01 sys=0.00, real=0.01 secs] 
+0.637: [GC (Allocation Failure) 0.637: [DefNew: 157246K->157246K(157248K), 0.0000283 secs]0.637: [Tenured: 332162K->305426K(349568K), 0.0400256 secs] 489409K->305426K(506816K), [Metaspace: 2638K->2638K(1056768K)], 0.0401709 secs] [Times: user=0.03 sys=0.00, real=0.04 secs] 
+0.695: [GC (Allocation Failure) 0.695: [DefNew: 139776K->139776K(157248K), 0.0000321 secs]0.695: [Tenured: 305426K->312478K(349568K), 0.0422871 secs] 445202K->312478K(506816K), [Metaspace: 2638K->2638K(1056768K)], 0.0424523 secs] [Times: user=0.03 sys=0.00, real=0.04 secs] 
+0.757: [GC (Allocation Failure) 0.757: [DefNew: 139776K->139776K(157248K), 0.0000282 secs]0.757: [Tenured: 312478K->304686K(349568K), 0.0437838 secs] 452254K->304686K(506816K), [Metaspace: 2638K->2638K(1056768K)], 0.0439371 secs] [Times: user=0.03 sys=0.00, real=0.04 secs] 
+0.820: [GC (Allocation Failure) 0.820: [DefNew: 139776K->17471K(157248K), 0.0073854 secs] 444462K->351019K(506816K), 0.0074882 secs] [Times: user=0.00 sys=0.00, real=0.01 secs] 
+0.846: [GC (Allocation Failure) 0.846: [DefNew: 157247K->157247K(157248K), 0.0000316 secs]0.846: [Tenured: 333548K->339935K(349568K), 0.0409027 secs] 490795K->339935K(506816K), [Metaspace: 2638K->2638K(1056768K)], 0.0410667 secs] [Times: user=0.05 sys=0.00, real=0.04 secs] 
+0.906: [GC (Allocation Failure) 0.906: [DefNew: 139776K->139776K(157248K), 0.0000326 secs]0.906: [Tenured: 339935K->349532K(349568K), 0.0479089 secs] 479711K->350216K(506816K), [Metaspace: 2638K->2638K(1056768K)], 0.0480807 secs] [Times: user=0.05 sys=0.00, real=0.05 secs] 
+0.976: [Full GC (Allocation Failure) 0.976: [Tenured: 349532K->349239K(349568K), 0.0459060 secs] 506690K->355676K(506816K), [Metaspace: 2638K->2638K(1056768K)], 0.0460144 secs] [Times: user=0.05 sys=0.00, real=0.05 secs] 
+1.045: [Full GC (Allocation Failure) 1.045: [Tenured: 349561K->341474K(349568K), 0.0521174 secs] 506781K->341474K(506816K), [Metaspace: 2638K->2638K(1056768K)], 0.0522150 secs] [Times: user=0.05 sys=0.00, real=0.05 secs] 
+Heap
+ def new generation   total 157248K, used 6070K [0x00000000e0000000, 0x00000000eaaa0000, 0x00000000eaaa0000)
+  eden space 139776K,   4% used [0x00000000e0000000, 0x00000000e05edb90, 0x00000000e8880000)
+  from space 17472K,   0% used [0x00000000e9990000, 0x00000000e9990000, 0x00000000eaaa0000)
+  to   space 17472K,   0% used [0x00000000e8880000, 0x00000000e8880000, 0x00000000e9990000)
+ tenured generation   total 349568K, used 341474K [0x00000000eaaa0000, 0x0000000100000000, 0x0000000100000000)
+   the space 349568K,  97% used [0x00000000eaaa0000, 0x00000000ff818968, 0x00000000ff818a00, 0x0000000100000000)
+ Metaspace       used 2645K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 291K, capacity 386K, committed 512K, reserved 1048576K
+  
+  
+以上为串行GC，堆内存配置-Xms512m -Xmx512m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、观察第一次GC可以看出，young区在GC前是136.5M，GC后大约是17M，减少了119.5M，
+而整个堆内存的对象在GC前是136.5M，GC后约是42M，减少了约94.5M，young区减少的对象与整个堆减少的对象之差为25M（119.5-94.5）。
+产生这种差异，是因为这25M其实是从young区晋升到了old区。
+
+2、在经历了17次youngGC后，最后几次GC的花费的时间明显变长，并且连续进行了2次fullGC，可以看到这两次fullGC，old区的GC回收并没有什么效果，old区的
+对象数量变化不大。不过整个堆得回收变化还是有的，应该是young区的对象被回收了。
+这种情况下，old区会持续处于充盈状态，young区将无法继续晋升，一旦young区新生对象的速度比回收速度快，并保持一段时间，那么可能会引起内存
+溢出的问题，若要解决这个问题，可以修改相应参数，增加堆内存的大小，即增加“蓄水池”的大小，可以容纳更多的对象；
+
+
+------------------------------------------朴实分割线------------------------------------------------
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseSerialGC -Xms1g -Xmx1g -XX:+PrintGCDetails GCLogAnalysis
+正在执行...
+[GC (Allocation Failure) [DefNew: 279616K->34944K(314560K), 0.0464783 secs] 279616K->86417K(1013632K), 0.0468552 secs] [Times: user=0.00 sys=0.05, real=0.05 secs]
+[GC (Allocation Failure) [DefNew: 314560K->34943K(314560K), 0.0557797 secs] 366033K->155164K(1013632K), 0.0561504 secs] [Times: user=0.00 sys=0.05, real=0.06 secs]
+[GC (Allocation Failure) [DefNew: 314559K->34943K(314560K), 0.0498885 secs] 434780K->237389K(1013632K), 0.0502520 secs] [Times: user=0.03 sys=0.02, real=0.05 secs]
+[GC (Allocation Failure) [DefNew: 314559K->34943K(314560K), 0.0443490 secs] 517005K->308304K(1013632K), 0.0447295 secs] [Times: user=0.02 sys=0.02, real=0.04 secs]
+[GC (Allocation Failure) [DefNew: 314559K->34944K(314560K), 0.0475535 secs] 587920K->387805K(1013632K), 0.0478857 secs] [Times: user=0.03 sys=0.02, real=0.05 secs]
+[GC (Allocation Failure) [DefNew: 314560K->34944K(314560K), 0.0513918 secs] 667421K->471298K(1013632K), 0.0517113 secs] [Times: user=0.03 sys=0.03, real=0.05 secs]
+[GC (Allocation Failure) [DefNew: 314236K->34944K(314560K), 0.0518291 secs] 750590K->555379K(1013632K), 0.0521356 secs] [Times: user=0.02 sys=0.03, real=0.05 secs]
+[GC (Allocation Failure) [DefNew: 314560K->34943K(314560K), 0.0491496 secs] 834995K->631634K(1013632K), 0.0493941 secs] [Times: user=0.02 sys=0.03, real=0.05 secs]
+[GC (Allocation Failure) [DefNew: 314559K->34943K(314560K), 0.0494003 secs] 911250K->712096K(1013632K), 0.0497041 secs] [Times: user=0.05 sys=0.02, real=0.05 secs]
+[GC (Allocation Failure) [DefNew: 314559K->314559K(314560K), 0.0004701 secs][Tenured: 677152K->372090K(699072K), 0.0536216 secs] 991712K->372090K(1013632K), [Metaspace: 2638K->2638K(1056768K)], 0.0552777 secs] [Times: user=0.05 sys=0.00, real=0.06 secs]
+执行结束!共生成对象次数:10707
+Heap
+ def new generation   total 314560K, used 11447K [0x00000000c0000000, 0x00000000d5550000, 0x00000000d5550000)
+  eden space 279616K,   4% used [0x00000000c0000000, 0x00000000c0b2dee8, 0x00000000d1110000)
+  from space 34944K,   0% used [0x00000000d3330000, 0x00000000d3330000, 0x00000000d5550000)
+  to   space 34944K,   0% used [0x00000000d1110000, 0x00000000d1110000, 0x00000000d3330000)
+ tenured generation   total 699072K, used 372090K [0x00000000d5550000, 0x0000000100000000, 0x0000000100000000)
+   the space 699072K,  53% used [0x00000000d5550000, 0x00000000ec0ae9f8, 0x00000000ec0aea00, 0x0000000100000000)
+ Metaspace       used 2645K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 291K, capacity 386K, committed 512K, reserved 1048576K
+
+以上为串行GC，堆内存配置-Xms1g -Xmx1g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、可以看到内存设定增大到1个g后，GC次数有明显的减少，GC暂停的时间相对较长。
+2、第10次出现了fullGC，可以看到，old区从661M减少到363，减少了约298M对象，而整个堆内存从968M减少到363M，减少了605M，那么整个堆减少的对象与old区减少的对象相比，多减少了307M，
+而整个young区的大小刚好是307M，也就是整个young区在这次fullGC时被清空了。
+
+
+------------------------------------------朴实分割线------------------------------------------------
+
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseSerialGC -Xms256m -Xmx256m -XX:+PrintGCDetails GCLogAnalysis
+正在执行...
+[GC (Allocation Failure) [DefNew: 69921K->8703K(78656K), 0.0162833 secs] 69921K->25991K(253440K), 0.0167097 secs] [Times: user=0.02 sys=0.00, real=0.02 secs]
+[GC (Allocation Failure) [DefNew: 78655K->8701K(78656K), 0.0204026 secs] 95943K->51748K(253440K), 0.0207646 secs] [Times: user=0.02 sys=0.00, real=0.02 secs]
+[GC (Allocation Failure) [DefNew: 78653K->8701K(78656K), 0.0160833 secs] 121700K->74878K(253440K), 0.0163995 secs] [Times: user=0.00 sys=0.02, real=0.02 secs]
+[GC (Allocation Failure) [DefNew: 78541K->8703K(78656K), 0.0154707 secs] 144719K->101239K(253440K), 0.0158132 secs] [Times: user=0.00 sys=0.01, real=0.02 secs]
+[GC (Allocation Failure) [DefNew: 78655K->8702K(78656K), 0.0146765 secs] 171191K->125655K(253440K), 0.0150390 secs] [Times: user=0.02 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [DefNew: 78654K->8702K(78656K), 0.0164231 secs] 195607K->153711K(253440K), 0.0167741 secs] [Times: user=0.00 sys=0.02, real=0.02 secs]
+[GC (Allocation Failure) [DefNew: 78359K->78359K(78656K), 0.0003214 secs][Tenured: 145008K->161802K(174784K), 0.0285246 secs] 223367K->161802K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0296326 secs] [Times: user=0.02 sys=0.00, real=0.03 secs]
+[GC (Allocation Failure) [DefNew: 69920K->69920K(78656K), 0.0003227 secs][Tenured: 161802K->174492K(174784K), 0.0284703 secs] 231723K->178527K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0296130 secs] [Times: user=0.02 sys=0.02, real=0.03 secs]
+[Full GC (Allocation Failure) [Tenured: 174754K->174738K(174784K), 0.0249218 secs] 253316K->192866K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0255960 secs] [Times: user=0.01 sys=0.00, real=0.03 secs]
+[Full GC (Allocation Failure) [Tenured: 174738K->174656K(174784K), 0.0304956 secs] 253130K->196488K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0311993 secs] [Times: user=0.03 sys=0.00, real=0.03 secs]
+[Full GC (Allocation Failure) [Tenured: 174728K->174728K(174784K), 0.0065626 secs] 253378K->211891K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0072829 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174728K->174560K(174784K), 0.0164062 secs] 252709K->219609K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0171606 secs] [Times: user=0.02 sys=0.00, real=0.02 secs]
+[Full GC (Allocation Failure) [Tenured: 174639K->174709K(174784K), 0.0267549 secs] 253280K->222430K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0274760 secs] [Times: user=0.03 sys=0.00, real=0.03 secs]
+[Full GC (Allocation Failure) [Tenured: 174709K->174591K(174784K), 0.0333746 secs] 253277K->218423K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0341050 secs] [Times: user=0.03 sys=0.00, real=0.03 secs]
+[Full GC (Allocation Failure) [Tenured: 174729K->174729K(174784K), 0.0071697 secs] 253267K->227754K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0078975 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174729K->174729K(174784K), 0.0090812 secs] 253115K->234294K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0097983 secs] [Times: user=0.02 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174778K->174581K(174784K), 0.0191390 secs] 253424K->236398K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0197705 secs] [Times: user=0.02 sys=0.00, real=0.02 secs]
+[Full GC (Allocation Failure) [Tenured: 174581K->174351K(174784K), 0.0374798 secs] 252782K->230021K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0382135 secs] [Times: user=0.03 sys=0.00, real=0.04 secs]
+[Full GC (Allocation Failure) [Tenured: 174723K->174723K(174784K), 0.0062174 secs] 253115K->237984K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0069396 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174759K->174759K(174784K), 0.0059401 secs] 253386K->243465K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0066585 secs] [Times: user=0.01 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174759K->174759K(174784K), 0.0088029 secs] 253317K->247188K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0142380 secs] [Times: user=0.02 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174759K->174704K(174784K), 0.0385736 secs] 253345K->238633K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0444541 secs] [Times: user=0.05 sys=0.00, real=0.05 secs]
+[Full GC (Allocation Failure) [Tenured: 174704K->174704K(174784K), 0.0099961 secs] 253327K->243354K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0106995 secs] [Times: user=0.02 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174704K->174704K(174784K), 0.0117276 secs] 253128K->248875K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0170684 secs] [Times: user=0.02 sys=0.00, real=0.02 secs]
+[Full GC (Allocation Failure) [Tenured: 174704K->174704K(174784K), 0.0048329 secs] 253251K->250655K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0112167 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174704K->174412K(174784K), 0.0379643 secs] 253189K->245330K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0417569 secs] [Times: user=0.05 sys=0.00, real=0.04 secs]
+[Full GC (Allocation Failure) [Tenured: 174412K->174412K(174784K), 0.0058550 secs] 253029K->248744K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0083004 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174412K->174412K(174784K), 0.0129161 secs] 252897K->250510K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0139306 secs] [Times: user=0.01 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174718K->174718K(174784K), 0.0030414 secs] 253175K->250921K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0036832 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[Full GC (Allocation Failure) [Tenured: 174718K->174607K(174784K), 0.0391266 secs] 252824K->247352K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0408436 secs] [Times: user=0.05 sys=0.00, real=0.04 secs]
+[Full GC (Allocation Failure) [Tenured: 174607K->174607K(174784K), 0.0024778 secs] 253201K->249459K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0031091 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[Full GC (Allocation Failure) [Tenured: 174720K->174720K(174784K), 0.0096264 secs] 253358K->249895K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0111525 secs] [Times: user=0.02 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174720K->174720K(174784K), 0.0061878 secs] 252765K->250376K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0068942 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174720K->174693K(174784K), 0.0352577 secs] 253310K->248112K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0359531 secs] [Times: user=0.03 sys=0.00, real=0.04 secs]
+[Full GC (Allocation Failure) [Tenured: 174693K->174693K(174784K), 0.0024705 secs] 253240K->250391K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0031227 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[Full GC (Allocation Failure) [Tenured: 174764K->174764K(174784K), 0.0100859 secs] 253419K->251354K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0108489 secs] [Times: user=0.01 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174764K->174764K(174784K), 0.0032177 secs] 253347K->251867K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0098411 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174764K->174715K(174784K), 0.0337212 secs] 253251K->250172K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0364257 secs] [Times: user=0.03 sys=0.00, real=0.04 secs]
+[Full GC (Allocation Failure) [Tenured: 174715K->174715K(174784K), 0.0069707 secs] 253200K->251777K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0098437 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174715K->174715K(174784K), 0.0092074 secs] 252695K->251903K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0108122 secs] [Times: user=0.02 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174715K->174715K(174784K), 0.0094920 secs] 252676K->252656K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0103756 secs] [Times: user=0.02 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [Tenured: 174715K->174732K(174784K), 0.0327988 secs] 252656K->252210K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0413647 secs] [Times: user=0.03 sys=0.00, real=0.04 secs]
+Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
+        at GCLogAnalysis.generateGarbage(GCLogAnalysis.java:48)
+        at GCLogAnalysis.main(GCLogAnalysis.java:25)
+Heap
+ def new generation   total 78656K, used 78002K [0x00000000f0000000, 0x00000000f5550000, 0x00000000f5550000)
+  eden space 69952K, 100% used [0x00000000f0000000, 0x00000000f4450000, 0x00000000f4450000)
+  from space 8704K,  92% used [0x00000000f4450000, 0x00000000f4c2c938, 0x00000000f4cd0000)
+  to   space 8704K,   0% used [0x00000000f4cd0000, 0x00000000f4cd0000, 0x00000000f5550000)
+ tenured generation   total 174784K, used 174732K [0x00000000f5550000, 0x0000000100000000, 0x0000000100000000)
+   the space 174784K,  99% used [0x00000000f5550000, 0x00000000ffff33f8, 0x00000000ffff3400, 0x0000000100000000)
+ Metaspace       used 2669K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 294K, capacity 386K, committed 512K, reserved 1048576K
+  
+以上为串行GC，堆内存配置-Xms256m -Xmx256m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、可以看到内存设定到256M之后，GC的频率显著提高，几次youngGC之后就进行了一次fullGC，并且连续三十多次fullGC后内存溢出，报了OOM；
+2、内存太小，对象生成速度又快，导致内存很快被填满，回收的速度赶不上对象生成的速度，所以内容溢出的风险很大。解决办法很无脑，增加内存；
+
+------------------------------------------朴实分割线------------------------------------------------
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseSerialGC -Xms4g -Xmx4g -XX:+PrintGCDetails GCLogAnalysis
+正在执行...
+[GC (Allocation Failure) [DefNew: 1118528K->139775K(1258304K), 0.1224265 secs] 1118528K->235283K(4054528K), 0.1227882 secs] [Times: user=0.08 sys=0.05, real=0.12 secs]
+[GC (Allocation Failure) [DefNew: 1258303K->139775K(1258304K), 0.1571853 secs] 1353811K->394328K(4054528K), 0.1575936 secs] [Times: user=0.05 sys=0.11, real=0.16 secs]
+执行结束!共生成对象次数:9342
+Heap
+ def new generation   total 1258304K, used 429078K [0x00000006c0000000, 0x0000000715550000, 0x0000000715550000)
+  eden space 1118528K,  25% used [0x00000006c0000000, 0x00000006d1a85b68, 0x0000000704450000)
+  from space 139776K,  99% used [0x0000000704450000, 0x000000070cccfff8, 0x000000070ccd0000)
+  to   space 139776K,   0% used [0x000000070ccd0000, 0x000000070ccd0000, 0x0000000715550000)
+ tenured generation   total 2796224K, used 254552K [0x0000000715550000, 0x00000007c0000000, 0x00000007c0000000)
+   the space 2796224K,   9% used [0x0000000715550000, 0x0000000724de6270, 0x0000000724de6400, 0x00000007c0000000)
+ Metaspace       used 2645K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 291K, capacity 386K, committed 512K, reserved 1048576K
+  
+以上为串行GC，堆内存配置-Xms4g -Xmx4g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+1、4g内存下，串行GC的频率非常低，但每次GC暂停时间也长了很多，GC效率较低；
+2、由于内存充足，old区的对象没有办法把池子填满，所以并没有触发fullGC；
+
+
+------------------------------------------朴实分割线------------------------------------------------
+##并行GC打印日志分析
+
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseParallelGC -Xms512m -Xmx512m -XX:+PrintGCDetails GCLogAnalysis
+正在执行...
+[GC (Allocation Failure) [PSYoungGen: 131584K->21483K(153088K)] 131584K->45522K(502784K), 0.0087536 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 152505K->21501K(153088K)] 176543K->88572K(502784K), 0.0117741 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 153085K->21503K(153088K)] 220156K->130117K(502784K), 0.0113659 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 153087K->21500K(153088K)] 261701K->175965K(502784K), 0.0120579 secs] [Times: user=0.02 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 153084K->21502K(153088K)] 307549K->208320K(502784K), 0.0103376 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 153086K->21488K(80384K)] 339904K->246832K(430080K), 0.0111619 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 80368K->35514K(116736K)] 305712K->264888K(466432K), 0.0074039 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 94394K->47748K(116736K)] 323768K->281507K(466432K), 0.0089868 secs] [Times: user=0.14 sys=0.02, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 106628K->57744K(116736K)] 340387K->301663K(466432K), 0.0116460 secs] [Times: user=0.16 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 116541K->42420K(116736K)] 360459K->320779K(466432K), 0.0121912 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 101300K->19857K(116736K)] 379659K->337210K(466432K), 0.0105180 secs] [Times: user=0.01 sys=0.14, real=0.01 secs]
+[Full GC (Ergonomics) [PSYoungGen: 19857K->0K(116736K)] [ParOldGen: 317353K->240664K(349696K)] 337210K->240664K(466432K), [Metaspace: 2638K->2638K(1056768K)], 0.0431993 secs] [Times: user=0.31 sys=0.00, real=0.04 secs]
+[GC (Allocation Failure) [PSYoungGen: 58880K->18771K(116736K)] 299544K->259435K(466432K), 0.0043629 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[GC (Allocation Failure) [PSYoungGen: 77630K->21003K(116736K)] 318294K->278346K(466432K), 0.0071969 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 79871K->19107K(116736K)] 337214K->295721K(466432K), 0.0067920 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 77987K->18628K(116736K)] 354601K->313670K(466432K), 0.0074460 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 77364K->23264K(116736K)] 372407K->336082K(466432K), 0.0075228 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Ergonomics) [PSYoungGen: 23264K->0K(116736K)] [ParOldGen: 312817K->270971K(349696K)] 336082K->270971K(466432K), [Metaspace: 2638K->2638K(1056768K)], 0.0434529 secs] [Times: user=0.42 sys=0.00, real=0.04 secs]
+[GC (Allocation Failure) [PSYoungGen: 58720K->22320K(116736K)] 329692K->293292K(466432K), 0.0043591 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[GC (Allocation Failure) [PSYoungGen: 81182K->23250K(116736K)] 352154K->315965K(466432K), 0.0074108 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 81984K->21197K(116736K)] 374698K->336032K(466432K), 0.0077813 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Ergonomics) [PSYoungGen: 21197K->0K(116736K)] [ParOldGen: 314834K->297803K(349696K)] 336032K->297803K(466432K), [Metaspace: 2638K->2638K(1056768K)], 0.0530965 secs] [Times: user=0.47 sys=0.00, real=0.05 secs]
+[GC (Allocation Failure) [PSYoungGen: 58249K->18657K(116736K)] 356053K->316461K(466432K), 0.0036816 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[GC (Allocation Failure) [PSYoungGen: 77537K->18983K(116736K)] 375341K->334000K(466432K), 0.0073892 secs] [Times: user=0.05 sys=0.00, real=0.01 secs]
+[Full GC (Ergonomics) [PSYoungGen: 18983K->0K(116736K)] [ParOldGen: 315016K->308530K(349696K)] 334000K->308530K(466432K), [Metaspace: 2638K->2638K(1056768K)], 0.0551254 secs] [Times: user=0.47 sys=0.00, real=0.06 secs]
+[GC (Allocation Failure) [PSYoungGen: 58663K->21014K(116736K)] 367193K->329544K(466432K), 0.0043733 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 79697K->24815K(116736K)] 388227K->353554K(466432K), 0.0079365 secs] [Times: user=0.02 sys=0.00, real=0.01 secs]
+[Full GC (Ergonomics) [PSYoungGen: 24815K->0K(116736K)] [ParOldGen: 328739K->322839K(349696K)] 353554K->322839K(466432K), [Metaspace: 2638K->2638K(1056768K)], 0.0568074 secs] [Times: user=0.42 sys=0.00, real=0.06 secs]
+[Full GC (Ergonomics) [PSYoungGen: 58687K->0K(116736K)] [ParOldGen: 322839K->321566K(349696K)] 381526K->321566K(466432K), [Metaspace: 2638K->2638K(1056768K)], 0.0547029 secs] [Times: user=0.42 sys=0.02, real=0.06 secs]
+[Full GC (Ergonomics) [PSYoungGen: 58880K->0K(116736K)] [ParOldGen: 321566K->326090K(349696K)] 380446K->326090K(466432K), [Metaspace: 2638K->2638K(1056768K)], 0.0534580 secs] [Times: user=0.47 sys=0.00, real=0.05 secs]
+[Full GC (Ergonomics) [PSYoungGen: 58880K->0K(116736K)] [ParOldGen: 326090K->328712K(349696K)] 384970K->328712K(466432K), [Metaspace: 2638K->2638K(1056768K)], 0.0559718 secs] [Times: user=0.47 sys=0.00, real=0.06 secs]
+[Full GC (Ergonomics) [PSYoungGen: 58806K->0K(116736K)] [ParOldGen: 328712K->329850K(349696K)] 387519K->329850K(466432K), [Metaspace: 2638K->2638K(1056768K)], 0.0581671 secs] [Times: user=0.63 sys=0.00, real=0.06 secs]
+执行结束!共生成对象次数:7597
+Heap
+ PSYoungGen      total 116736K, used 2931K [0x00000000f5580000, 0x0000000100000000, 0x0000000100000000)
+  eden space 58880K, 4% used [0x00000000f5580000,0x00000000f585cc20,0x00000000f8f00000)
+  from space 57856K, 0% used [0x00000000f8f00000,0x00000000f8f00000,0x00000000fc780000)
+  to   space 57856K, 0% used [0x00000000fc780000,0x00000000fc780000,0x0000000100000000)
+ ParOldGen       total 349696K, used 329850K [0x00000000e0000000, 0x00000000f5580000, 0x00000000f5580000)
+  object space 349696K, 94% used [0x00000000e0000000,0x00000000f421e850,0x00000000f5580000)
+ Metaspace       used 2645K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 291K, capacity 386K, committed 512K, reserved 1048576K
+  
+  
+以上为并行GC，堆内存配置-Xms512m -Xmx512m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+
+1、观察并行GC的日志，可以看出，并行GC每次youngGC的时间相比于串行GC所花费的时间更短，这是并行GC回收对象的效率优于串行；
+2、受限于内存较小，并行GC的回收频率较高，同时到了程序运行尾声，晋升进入old区的对象数量维持在较高水位，后续fullGC的效果不明显，所以连续触发了fullGC，因此内存中的对象水
+会比较稳定得维持在一定水平，但GC的频率来看，这种状态并不健康，建议扩大内存进行改善；
+
+------------------------------------------朴实分割线------------------------------------------------
+
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseSerialGC -Xms1g -Xmx1g -XX:+PrintGCDetails GCLogAnalysis
+正在执行...
+[GC (Allocation Failure) [DefNew: 279616K->34944K(314560K), 0.0514569 secs] 279616K->88944K(1013632K), 0.0518133 secs] [Times: user=0.02 sys=0.03, real=0.05 secs]
+[GC (Allocation Failure) [DefNew: 314560K->34943K(314560K), 0.0660402 secs] 368560K->167881K(1013632K), 0.0664316 secs] [Times: user=0.00 sys=0.06, real=0.07 secs]
+[GC (Allocation Failure) [DefNew: 314559K->34944K(314560K), 0.0530113 secs] 447497K->242514K(1013632K), 0.0533751 secs] [Times: user=0.02 sys=0.03, real=0.05 secs]
+[GC (Allocation Failure) [DefNew: 314560K->34943K(314560K), 0.0558457 secs] 522130K->325365K(1013632K), 0.0561848 secs] [Times: user=0.00 sys=0.06, real=0.06 secs]
+[GC (Allocation Failure) [DefNew: 314559K->34943K(314560K), 0.0521729 secs] 604981K->398674K(1013632K), 0.0525571 secs] [Times: user=0.03 sys=0.03, real=0.05 secs]
+[GC (Allocation Failure) [DefNew: 314559K->34944K(314560K), 0.0481332 secs] 678290K->476755K(1013632K), 0.0484726 secs] [Times: user=0.02 sys=0.03, real=0.05 secs]
+[GC (Allocation Failure) [DefNew: 314560K->34943K(314560K), 0.0542604 secs] 756371K->565694K(1013632K), 0.0546328 secs] [Times: user=0.03 sys=0.03, real=0.06 secs]
+[GC (Allocation Failure) [DefNew: 314559K->34943K(314560K), 0.0502650 secs] 845310K->646299K(1013632K), 0.0507085 secs] [Times: user=0.02 sys=0.03, real=0.05 secs]
+[GC (Allocation Failure) [DefNew: 314559K->314559K(314560K), 0.0004509 secs][Tenured: 611355K->374826K(699072K), 0.0549179 secs] 925915K->374826K(1013632K), [Metaspace: 2638K->2638K(1056768K)], 0.0570444 secs] [Times: user=0.06 sys=0.00, real=0.06 secs]
+执行结束!共生成对象次数:9593
+Heap
+ def new generation   total 314560K, used 11177K [0x00000000c0000000, 0x00000000d5550000, 0x00000000d5550000)
+  eden space 279616K,   3% used [0x00000000c0000000, 0x00000000c0aea7d8, 0x00000000d1110000)
+  from space 34944K,   0% used [0x00000000d1110000, 0x00000000d1110000, 0x00000000d3330000)
+  to   space 34944K,   0% used [0x00000000d3330000, 0x00000000d3330000, 0x00000000d5550000)
+ tenured generation   total 699072K, used 374826K [0x00000000d5550000, 0x0000000100000000, 0x0000000100000000)
+   the space 699072K,  53% used [0x00000000d5550000, 0x00000000ec35ab38, 0x00000000ec35ac00, 0x0000000100000000)
+ Metaspace       used 2645K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 291K, capacity 386K, committed 512K, reserved 1048576K
+  
+以上为并行GC，堆内存配置-Xms1g -Xmx1g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+
+1、可以看到内存设定增大到1个g后，GC次数有明显的减少，GC暂停的时间相对较长。
+2、内存1g下，并行GC和串行GC并没有明显的差异，因为内存足够大，所以GC的次数不多，内存余量充足，程序运行较为健康。
+
+
+------------------------------------------朴实分割线------------------------------------------------
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseParallelGC -Xms256m -Xmx256m -XX:+PrintGCDetails GCLogAnalysis
+正在执行...
+[GC (Allocation Failure) [PSYoungGen: 65536K->10748K(76288K)] 65536K->17466K(251392K), 0.0043314 secs] [Times: user=0.08 sys=0.08, real=0.00 secs]
+[GC (Allocation Failure) [PSYoungGen: 75922K->10748K(76288K)] 82639K->38624K(251392K), 0.0062683 secs] [Times: user=0.03 sys=0.13, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 76079K->10740K(76288K)] 103956K->62548K(251392K), 0.0071034 secs] [Times: user=0.05 sys=0.11, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 76276K->10750K(76288K)] 128084K->84781K(251392K), 0.0062930 secs] [Times: user=0.06 sys=0.09, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 76254K->10734K(76288K)] 150285K->105563K(251392K), 0.0062098 secs] [Times: user=0.05 sys=0.11, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 76270K->10751K(40448K)] 171099K->125710K(215552K), 0.0059513 secs] [Times: user=0.00 sys=0.16, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 40171K->16073K(58368K)] 155130K->133582K(233472K), 0.0047824 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[GC (Allocation Failure) [PSYoungGen: 45716K->21401K(58368K)] 163225K->142724K(233472K), 0.0048724 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[GC (Allocation Failure) [PSYoungGen: 50898K->28118K(58368K)] 172220K->153468K(233472K), 0.0065884 secs] [Times: user=0.16 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 57676K->22171K(58368K)] 183025K->163524K(233472K), 0.0074312 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [PSYoungGen: 51683K->9157K(58368K)] 193036K->171021K(233472K), 0.0056433 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Ergonomics) [PSYoungGen: 9157K->0K(58368K)] [ParOldGen: 161863K->147083K(175104K)] 171021K->147083K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0269992 secs] [Times: user=0.31 sys=0.00, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29696K->0K(58368K)] [ParOldGen: 147083K->154326K(175104K)] 176779K->154326K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0231248 secs] [Times: user=0.16 sys=0.00, real=0.02 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29618K->0K(58368K)] [ParOldGen: 154326K->159086K(175104K)] 183945K->159086K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0253107 secs] [Times: user=0.16 sys=0.00, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29561K->0K(58368K)] [ParOldGen: 159086K->167033K(175104K)] 188647K->167033K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0303396 secs] [Times: user=0.31 sys=0.00, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29358K->248K(58368K)] [ParOldGen: 167033K->174939K(175104K)] 196392K->175188K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0311473 secs] [Times: user=0.17 sys=0.00, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29340K->5276K(58368K)] [ParOldGen: 174939K->174941K(175104K)] 204280K->180217K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0310887 secs] [Times: user=0.27 sys=0.02, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29696K->8641K(58368K)] [ParOldGen: 174941K->174764K(175104K)] 204637K->183406K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0322604 secs] [Times: user=0.30 sys=0.00, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29646K->14170K(58368K)] [ParOldGen: 174764K->174732K(175104K)] 204410K->188902K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0268674 secs] [Times: user=0.17 sys=0.00, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29696K->17114K(58368K)] [ParOldGen: 174732K->174695K(175104K)] 204428K->191810K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0317904 secs] [Times: user=0.17 sys=0.02, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29696K->18533K(58368K)] [ParOldGen: 174695K->174599K(175104K)] 204391K->193133K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0298896 secs] [Times: user=0.31 sys=0.00, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29696K->20373K(58368K)] [ParOldGen: 174599K->174990K(175104K)] 204295K->195364K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0300822 secs] [Times: user=0.30 sys=0.02, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29428K->22220K(58368K)] [ParOldGen: 174990K->175097K(175104K)] 204418K->197317K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0332010 secs] [Times: user=0.31 sys=0.00, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29686K->23377K(58368K)] [ParOldGen: 175097K->174932K(175104K)] 204783K->198310K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0314849 secs] [Times: user=0.17 sys=0.00, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29696K->24242K(58368K)] [ParOldGen: 174932K->174657K(175104K)] 204628K->198899K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0295967 secs] [Times: user=0.16 sys=0.02, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29572K->25748K(58368K)] [ParOldGen: 174657K->174844K(175104K)] 204230K->200593K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0277778 secs] [Times: user=0.05 sys=0.00, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29642K->26051K(58368K)] [ParOldGen: 174844K->175035K(175104K)] 204486K->201086K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0161679 secs] [Times: user=0.16 sys=0.00, real=0.02 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29693K->27610K(58368K)] [ParOldGen: 175035K->174892K(175104K)] 204728K->202502K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0289486 secs] [Times: user=0.27 sys=0.02, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29298K->27842K(58368K)] [ParOldGen: 174892K->174892K(175104K)] 204190K->202735K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0044521 secs] [Times: user=0.02 sys=0.00, real=0.00 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29695K->28076K(58368K)] [ParOldGen: 174892K->174810K(175104K)] 204587K->202887K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0053567 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29623K->28106K(58368K)] [ParOldGen: 174810K->174718K(175104K)] 204433K->202824K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0275371 secs] [Times: user=0.16 sys=0.00, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29669K->29056K(58368K)] [ParOldGen: 174718K->174429K(175104K)] 204387K->203486K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0303130 secs] [Times: user=0.16 sys=0.00, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29672K->29202K(58368K)] [ParOldGen: 174429K->174169K(175104K)] 204101K->203372K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0301969 secs] [Times: user=0.16 sys=0.00, real=0.03 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29689K->29184K(58368K)] [ParOldGen: 174169K->174169K(175104K)] 203859K->203353K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0045501 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29657K->29612K(58368K)] [ParOldGen: 174169K->174169K(175104K)] 203826K->203782K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0034560 secs] [Times: user=0.02 sys=0.00, real=0.00 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29684K->29648K(58368K)] [ParOldGen: 174169K->174169K(175104K)] 203854K->203818K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0043783 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29689K->29576K(58368K)] [ParOldGen: 175091K->174333K(175104K)] 204780K->203910K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0043416 secs] [Times: user=0.16 sys=0.00, real=0.00 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29638K->29576K(58368K)] [ParOldGen: 174333K->174333K(175104K)] 203971K->203910K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0053642 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29692K->29667K(58368K)] [ParOldGen: 174880K->174754K(175104K)] 204572K->204421K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0041231 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29681K->29667K(58368K)] [ParOldGen: 175042K->174898K(175104K)] 204723K->204565K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0041187 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29688K->29667K(58368K)] [ParOldGen: 175094K->174628K(175104K)] 204782K->204295K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0099670 secs] [Times: user=0.09 sys=0.00, real=0.01 secs]
+[Full GC (Ergonomics) [PSYoungGen: 29676K->29667K(58368K)] [ParOldGen: 175068K->174610K(175104K)] 204745K->204277K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0057063 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[Full GC (Allocation Failure) [PSYoungGen: 29667K->29667K(58368K)] [ParOldGen: 174610K->174590K(175104K)] 204277K->204258K(233472K), [Metaspace: 2638K->2638K(1056768K)], 0.0448410 secs] [Times: user=0.13 sys=0.00, real=0.05 secs]
+Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
+        at GCLogAnalysis.generateGarbage(GCLogAnalysis.java:48)
+        at GCLogAnalysis.main(GCLogAnalysis.java:25)
+Heap
+ PSYoungGen      total 58368K, used 29696K [0x00000000fab00000, 0x0000000100000000, 0x0000000100000000)
+  eden space 29696K, 100% used [0x00000000fab00000,0x00000000fc800000,0x00000000fc800000)
+  from space 28672K, 0% used [0x00000000fc800000,0x00000000fc800000,0x00000000fe400000)
+  to   space 28672K, 0% used [0x00000000fe400000,0x00000000fe400000,0x0000000100000000)
+ ParOldGen       total 175104K, used 174590K [0x00000000f0000000, 0x00000000fab00000, 0x00000000fab00000)
+  object space 175104K, 99% used [0x00000000f0000000,0x00000000faa7fb60,0x00000000fab00000)
+ Metaspace       used 2669K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 294K, capacity 386K, committed 512K, reserved 1048576K
+  
+以上为并行GC，堆内存配置-Xms256m -Xmx256m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+
+1、可以看到内存设定到256M之后，GC的频率显著提高，相比串行GC，并行GC的效率体现得也较高，GC花费时间相对较短；
+2、与串行GC一样，由于内存的过小的局限，导致程序运行尾声GC的频率增加，并连续触发fullGC, 但“水池”盈满并没有多少改善，后面终于溢出报错。
+
+
+------------------------------------------朴实分割线------------------------------------------------
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseParallelGC -Xms4g -Xmx4g -XX:+PrintGCDetails GCLogAnalysis
+正在执行...
+[GC (Allocation Failure) [PSYoungGen: 1048576K->174575K(1223168K)] 1048576K->228579K(4019712K), 0.0353266 secs] [Times: user=0.08 sys=0.23, real=0.04 secs]
+[GC (Allocation Failure) [PSYoungGen: 1223151K->174584K(1223168K)] 1277155K->365692K(4019712K), 0.0468510 secs] [Times: user=0.14 sys=0.33, real=0.05 secs]
+[GC (Allocation Failure) [PSYoungGen: 1223160K->174582K(1223168K)] 1414268K->491180K(4019712K), 0.0539567 secs] [Times: user=0.23 sys=0.23, real=0.06 secs]
+执行结束!共生成对象次数:13837
+Heap
+ PSYoungGen      total 1223168K, used 726292K [0x000000076ab00000, 0x00000007c0000000, 0x00000007c0000000)
+  eden space 1048576K, 52% used [0x000000076ab00000,0x000000078c5c76a0,0x00000007aab00000)
+  from space 174592K, 99% used [0x00000007aab00000,0x00000007b557db88,0x00000007b5580000)
+  to   space 174592K, 0% used [0x00000007b5580000,0x00000007b5580000,0x00000007c0000000)
+ ParOldGen       total 2796544K, used 316597K [0x00000006c0000000, 0x000000076ab00000, 0x000000076ab00000)
+  object space 2796544K, 11% used [0x00000006c0000000,0x00000006d352d688,0x000000076ab00000)
+ Metaspace       used 2645K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 291K, capacity 386K, committed 512K, reserved 1048576K
+  
+以上为并行GC，堆内存配置-Xms4g -Xmx4g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+
+1、4g内存下，并行GC的频率也非常低，GC的频率比串行GC高一些，但每次GC暂停时间明显短了很多，这说明并行GC的效率比串行GC要好上不少。
+2、同样由于内存充足，old区的对象没有办法把内存“池子”填满，所以并没有触发fullGC；
+
+
+------------------------------------------朴实分割线------------------------------------------------
+##CMS GC打印日志分析
+
+
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseConcMarkSweepGC -Xms512m -Xmx512m -XX:+PrintGCDetails GCLogAnalysis
+正在执行...
+[GC (Allocation Failure) [ParNew: 139776K->17470K(157248K), 0.0145389 secs] 139776K->53107K(506816K), 0.0149742 secs] [Times: user=0.00 sys=0.16, real=0.02 secs]
+[GC (Allocation Failure) [ParNew: 157246K->17472K(157248K), 0.0149863 secs] 192883K->93608K(506816K), 0.0153553 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [ParNew: 157248K->17470K(157248K), 0.0321691 secs] 233384K->141806K(506816K), 0.0325055 secs] [Times: user=0.30 sys=0.02, real=0.03 secs]
+[GC (Allocation Failure) [ParNew: 157246K->17471K(157248K), 0.0310775 secs] 281582K->187534K(506816K), 0.0314311 secs] [Times: user=0.30 sys=0.02, real=0.03 secs]
+[GC (Allocation Failure) [ParNew: 157247K->17470K(157248K), 0.0298339 secs] 327310K->232109K(506816K), 0.0302026 secs] [Times: user=0.14 sys=0.02, real=0.03 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 214639K(349568K)] 259326K(506816K), 0.0010266 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-preclean-start]
+[CMS-concurrent-preclean: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-abortable-preclean-start]
+[GC (Allocation Failure) [ParNew: 157246K->17468K(157248K), 0.0285327 secs] 371885K->277017K(506816K), 0.0289041 secs] [Times: user=0.28 sys=0.03, real=0.03 secs]
+[GC (Allocation Failure) [ParNew: 157078K->17471K(157248K), 0.0297111 secs] 416627K->321089K(506816K), 0.0300691 secs] [Times: user=0.28 sys=0.03, real=0.03 secs]
+[GC (Allocation Failure) [ParNew (promotion failed): 157247K->157245K(157248K), 0.0299242 secs][CMS[CMS-concurrent-abortable-preclean: 0.003/0.141 secs] [Times: user=0.89 sys=0.09, real=0.14 secs]
+ (concurrent mode failure): 348850K->255227K(349568K), 0.0455319 secs] 460865K->255227K(506816K), [Metaspace: 2638K->2638K(1056768K)], 0.0763197 secs] [Times: user=0.33 sys=0.03, real=0.07 secs]
+[GC (Allocation Failure) [ParNew: 139776K->17471K(157248K), 0.0093221 secs] 395003K->295933K(506816K), 0.0097280 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 278462K(349568K)] 296077K(506816K), 0.0022213 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.02 sys=0.00, real=0.01 secs]
+[CMS-concurrent-preclean-start]
+[CMS-concurrent-preclean: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-abortable-preclean-start]
+[GC (Allocation Failure) [ParNew: 157247K->17470K(157248K), 0.0100528 secs] 435709K->339747K(506816K), 0.0103639 secs] [Times: user=0.16 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [ParNew: 157246K->157246K(157248K), 0.0003218 secs][CMS[CMS-concurrent-abortable-preclean: 0.002/0.045 secs] [Times: user=0.19 sys=0.00, real=0.05 secs]
+ (concurrent mode failure): 322276K->293572K(349568K), 0.0514796 secs] 479523K->293572K(506816K), [Metaspace: 2638K->2638K(1056768K)], 0.0527155 secs] [Times: user=0.05 sys=0.00, real=0.05 secs]
+[GC (Allocation Failure) [ParNew: 139776K->17471K(157248K), 0.0106495 secs] 433348K->336795K(506816K), 0.0110243 secs] [Times: user=0.16 sys=0.00, real=0.01 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 319324K(349568K)] 340677K(506816K), 0.0017825 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-preclean-start]
+[CMS-concurrent-preclean: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-abortable-preclean-start]
+[CMS-concurrent-abortable-preclean: 0.000/0.000 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[GC (CMS Final Remark) [YG occupancy: 56414 K (157248 K)][Rescan (parallel) , 0.0013158 secs][weak refs processing, 0.0001137 secs][class unloading, 0.0003016 secs][scrub symbol table, 0.0004191 secs][scrub string table, 0.0029032 secs][1 CMS-remark: 319324K(349568K)] 375739K(506816K), 0.0065728 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[CMS-concurrent-sweep-start]
+[CMS-concurrent-sweep: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[CMS-concurrent-reset-start]
+[CMS-concurrent-reset: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[GC (Allocation Failure) [ParNew: 157247K->17468K(157248K), 0.0097129 secs] 437445K->343989K(506816K), 0.0101742 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 326520K(349568K)] 344277K(506816K), 0.0073007 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[CMS-concurrent-preclean-start]
+[CMS-concurrent-preclean: 0.001/0.001 secs] [Times: user=0.03 sys=0.00, real=0.00 secs]
+[CMS-concurrent-abortable-preclean-start]
+[CMS-concurrent-abortable-preclean: 0.000/0.000 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (CMS Final Remark) [YG occupancy: 154204 K (157248 K)][Rescan (parallel) , 0.0011362 secs][weak refs processing, 0.0001248 secs][class unloading, 0.0003819 secs][scrub symbol table, 0.0007491 secs][scrub string table, 0.0028433 secs][1 CMS-remark: 326520K(349568K)] 480725K(506816K), 0.0078831 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[CMS-concurrent-sweep-start]
+[GC (Allocation Failure) [ParNew: 157244K->157244K(157248K), 0.0006555 secs][CMS[CMS-concurrent-sweep: 0.001/0.009 secs] [Times: user=0.02 sys=0.00, real=0.01 secs]
+ (concurrent mode failure): 320915K->317774K(349568K), 0.0885628 secs] 478160K->317774K(506816K), [Metaspace: 2638K->2638K(1056768K)], 0.0965848 secs] [Times: user=0.09 sys=0.00, real=0.10 secs]
+[GC (Allocation Failure) [ParNew: 139776K->139776K(157248K), 0.0003462 secs][CMS: 317774K->327899K(349568K), 0.0510393 secs] 457550K->327899K(506816K), [Metaspace: 2638K->2638K(1056768K)], 0.0522265 secs] [Times: user=0.05 sys=0.00, real=0.05 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 327899K(349568K)] 331533K(506816K), 0.0011120 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.002/0.002 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-preclean-start]
+[CMS-concurrent-preclean: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-abortable-preclean-start]
+[CMS-concurrent-abortable-preclean: 0.000/0.000 secs] [Times: user=0.01 sys=0.00, real=0.00 secs]
+[GC (CMS Final Remark) [YG occupancy: 71908 K (157248 K)][Rescan (parallel) , 0.0036879 secs][weak refs processing, 0.0001174 secs][class unloading, 0.0003248 secs][scrub symbol table, 0.0004519 secs][scrub string table, 0.0026697 secs][1 CMS-remark: 327899K(349568K)] 399808K(506816K), 0.0163027 secs] [Times: user=0.05 sys=0.00, real=0.02 secs]
+[CMS-concurrent-sweep-start]
+[CMS-concurrent-sweep: 0.001/0.001 secs] [Times: user=0.02 sys=0.00, real=0.01 secs]
+[CMS-concurrent-reset-start]
+[CMS-concurrent-reset: 0.000/0.000 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[GC (Allocation Failure) [ParNew: 139776K->139776K(157248K), 0.0003284 secs][CMS: 324969K->334953K(349568K), 0.0555678 secs] 464745K->334953K(506816K), [Metaspace: 2638K->2638K(1056768K)], 0.0606529 secs] [Times: user=0.06 sys=0.00, real=0.06 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 334953K(349568K)] 335742K(506816K), 0.0014129 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+执行结束!共生成对象次数:8529
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-preclean-start]
+Heap
+ par new generation   total 157248K, used 6353K [0x00000000e0000000, 0x00000000eaaa0000, 0x00000000eaaa0000)
+  eden space 139776K,   4% used [0x00000000e0000000, 0x00000000e06347e0, 0x00000000e8880000)
+  from space 17472K,   0% used [0x00000000e8880000, 0x00000000e8880000, 0x00000000e9990000)
+  to   space 17472K,   0% used [0x00000000e9990000, 0x00000000e9990000, 0x00000000eaaa0000)
+ concurrent mark-sweep generation total 349568K, used 334953K [0x00000000eaaa0000, 0x0000000100000000, 0x0000000100000000)
+ Metaspace       used 2645K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 291K, capacity 386K, committed 512K, reserved 1048576K
+[CMS-concurrent-preclean: 0.000/0.000 secs]
+
+以上为CMS GC，堆内存配置-Xms512m -Xmx512m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+
+1、观察CMS GC 日志，在CMS GC的6个阶段中，有2个阶段“初始标记”和“最终标记”需要GC暂停，从日志可以看出，这两次的暂停时间都非常短暂，加起来比并行GC的暂停时间更短，
+但CMS GC是分两次暂停，所以CMS GC 暂停的次数要比并行GC要多。
+
+------------------------------------------朴实分割线------------------------------------------------
+
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseConcMarkSweepGC -Xms1g -Xmx1g -XX:+PrintGCDetails GCLogAnalysis
+正在执行...
+[GC (Allocation Failure) [ParNew: 279616K->34944K(314560K), 0.0147483 secs] 279616K->80678K(1013632K), 0.0151456 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [ParNew: 314560K->34944K(314560K), 0.0212134 secs] 360294K->156745K(1013632K), 0.0215887 secs] [Times: user=0.20 sys=0.11, real=0.02 secs]
+[GC (Allocation Failure) [ParNew: 314560K->34942K(314560K), 0.0478273 secs] 436361K->233836K(1013632K), 0.0481158 secs] [Times: user=0.42 sys=0.05, real=0.05 secs]
+[GC (Allocation Failure) [ParNew: 314558K->34942K(314560K), 0.0463518 secs] 513452K->309773K(1013632K), 0.0466174 secs] [Times: user=0.44 sys=0.03, real=0.05 secs]
+[GC (Allocation Failure) [ParNew: 314558K->34944K(314560K), 0.0504063 secs] 589389K->393904K(1013632K), 0.0506676 secs] [Times: user=0.56 sys=0.03, real=0.05 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 358960K(699072K)] 400060K(1013632K), 0.0008188 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.002/0.002 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-preclean-start]
+[CMS-concurrent-preclean: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-abortable-preclean-start]
+[GC (Allocation Failure) [ParNew: 314560K->34944K(314560K), 0.0460499 secs] 673520K->469700K(1013632K), 0.0463291 secs] [Times: user=0.44 sys=0.03, real=0.05 secs]
+[GC (Allocation Failure) [ParNew: 314560K->34943K(314560K), 0.0477052 secs] 749316K->548560K(1013632K), 0.0479814 secs] [Times: user=0.45 sys=0.02, real=0.05 secs]
+[GC (Allocation Failure) [ParNew: 314547K->34942K(314560K), 0.0450502 secs] 828163K->620875K(1013632K), 0.0452942 secs] [Times: user=0.44 sys=0.03, real=0.05 secs]
+[GC (Allocation Failure) [ParNew: 314558K->34943K(314560K), 0.0523075 secs] 900491K->702776K(1013632K), 0.0526655 secs] [Times: user=0.44 sys=0.03, real=0.05 secs]
+[CMS-concurrent-abortable-preclean: 0.007/0.335 secs] [Times: user=1.92 sys=0.11, real=0.34 secs]
+[GC (CMS Final Remark) [YG occupancy: 46453 K (314560 K)][Rescan (parallel) , 0.0011408 secs][weak refs processing, 0.0001077 secs][class unloading, 0.0002745 secs][scrub symbol table, 0.0003600 secs][scrub string table, 0.0008007 secs][1 CMS-remark: 667832K(699072K)] 714285K(1013632K), 0.0036710 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-sweep-start]
+[CMS-concurrent-sweep: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-reset-start]
+[CMS-concurrent-reset: 0.002/0.002 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[GC (Allocation Failure) [ParNew: 314559K->34942K(314560K), 0.0199020 secs] 865893K->658606K(1013632K), 0.0201802 secs] [Times: user=0.17 sys=0.00, real=0.02 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 623663K(699072K)] 664276K(1013632K), 0.0025196 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-preclean-start]
+[CMS-concurrent-preclean: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-abortable-preclean-start]
+[GC (Allocation Failure) [ParNew: 314558K->314558K(314560K), 0.0003257 secs][CMS[CMS-concurrent-abortable-preclean: 0.001/0.034 secs] [Times: user=0.03 sys=0.00, real=0.03 secs]
+ (concurrent mode failure): 623663K->359163K(699072K), 0.0590860 secs] 938222K->359163K(1013632K), [Metaspace: 2638K->2638K(1056768K)], 0.0601845 secs] [Times: user=0.06 sys=0.00, real=0.06 secs]
+执行结束!共生成对象次数:11885
+Heap
+ par new generation   total 314560K, used 71155K [0x00000000c0000000, 0x00000000d5550000, 0x00000000d5550000)
+  eden space 279616K,  25% used [0x00000000c0000000, 0x00000000c457cca8, 0x00000000d1110000)
+  from space 34944K,   0% used [0x00000000d1110000, 0x00000000d1110000, 0x00000000d3330000)
+  to   space 34944K,   0% used [0x00000000d3330000, 0x00000000d3330000, 0x00000000d5550000)
+ concurrent mark-sweep generation total 699072K, used 359163K [0x00000000d5550000, 0x0000000100000000, 0x0000000100000000)
+ Metaspace       used 2645K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 291K, capacity 386K, committed 512K, reserved 1048576K
+
+
+以上为CMS GC，堆内存配置-Xms1g -Xmx1g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+
+1、同样的内存设定增大到1个g后，GC次数有明显的减少，GC暂停的时间相对较长；
+2、内存1g下，与并行GC、串行GC并没有明显的差异，因为内存足够大，所以GC的次数不多，内存余量充足，程序运行较为健康；
+3、同样的，暂停次数较多，暂停时间较短；
+
+------------------------------------------朴实分割线------------------------------------------------
+
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseConcMarkSweepGC -Xms256m -Xmx256m -XX:+PrintGCDetails GCLogAnalysis
+正在执行...
+[GC (Allocation Failure) [ParNew: 69952K->8698K(78656K), 0.0055970 secs] 69952K->21833K(253440K), 0.0059177 secs] [Times: user=0.05 sys=0.11, real=0.01 secs]
+[GC (Allocation Failure) [ParNew: 78650K->8704K(78656K), 0.0079022 secs] 91785K->41345K(253440K), 0.0082506 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[GC (Allocation Failure) [ParNew: 78656K->8699K(78656K), 0.0170854 secs] 111297K->64105K(253440K), 0.0174309 secs] [Times: user=0.11 sys=0.05, real=0.02 secs]
+[GC (Allocation Failure) [ParNew: 78263K->8699K(78656K), 0.0168626 secs] 133669K->88213K(253440K), 0.0171740 secs] [Times: user=0.14 sys=0.02, real=0.02 secs]
+[GC (Allocation Failure) [ParNew: 78651K->8696K(78656K), 0.0167674 secs] 158165K->112184K(253440K), 0.0171487 secs] [Times: user=0.16 sys=0.00, real=0.02 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 103488K(174784K)] 113670K(253440K), 0.0013365 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-preclean-start]
+[CMS-concurrent-preclean: 0.000/0.000 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-abortable-preclean-start]
+[GC (Allocation Failure) [ParNew: 78648K->8701K(78656K), 0.0174748 secs] 182136K->136259K(253440K), 0.0178470 secs] [Times: user=0.13 sys=0.03, real=0.02 secs]
+[GC (Allocation Failure) [ParNew: 78653K->8700K(78656K), 0.0166575 secs] 206211K->159507K(253440K), 0.0170617 secs] [Times: user=0.16 sys=0.00, real=0.02 secs]
+[GC (Allocation Failure) [ParNew: 78652K->78652K(78656K), 0.0003101 secs][CMS[CMS-concurrent-abortable-preclean: 0.002/0.072 secs] [Times: user=0.33 sys=0.03, real=0.07 secs]
+ (concurrent mode failure): 150806K->150079K(174784K), 0.0373745 secs] 229459K->150079K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0385047 secs] [Times: user=0.03 sys=0.00, real=0.04 secs]
+[GC (Allocation Failure) [ParNew: 69901K->8703K(78656K), 0.0138832 secs] 219980K->178181K(253440K), 0.0142434 secs] [Times: user=0.14 sys=0.02, real=0.01 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 169477K(174784K)] 179890K(253440K), 0.0015119 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[CMS-concurrent-preclean-start]
+[CMS-concurrent-preclean: 0.000/0.000 secs][GC (Allocation Failure)  [Times: user=0.03 sys=0.00, real=0.00 secs]
+[ParNew: 78655K->78655K(78656K), 0.0009404 secs][CMS (concurrent mode failure): 169477K->174764K(174784K), 0.0379228 secs] 248133K->184111K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0414687 secs] [Times: user=0.03 sys=0.00, real=0.04 secs]
+[Full GC (Allocation Failure) [CMS: 174764K->174776K(174784K), 0.0316189 secs] 253197K->192556K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0323421 secs] [Times: user=0.03 sys=0.00, real=0.03 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 174776K(174784K)] 194636K(253440K), 0.0011787 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.002/0.002 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-preclean-start]
+[CMS-concurrent-preclean: 0.001/0.001 secs] [Times: user=0.03 sys=0.00, real=0.00 secs]
+[CMS-concurrent-abortable-preclean-start]
+[CMS-concurrent-abortable-preclean: 0.000/0.000 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[GC (CMS Final Remark) [YG occupancy: 51880 K (78656 K)][Rescan (parallel) , 0.0006121 secs][weak refs processing, 0.0001158 secs][class unloading, 0.0003306 secs][scrub symbol table, 0.0004624 secs][scrub string table, 0.0039003 secs][1 CMS-remark: 174776K(174784K)] 226657K(253440K), 0.0114625 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+[CMS-concurrent-sweep-start]
+[CMS-concurrent-sweep: 0.000/0.000 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-reset-start]
+[CMS-concurrent-reset: 0.000/0.000 secs] [Times: user=0.02 sys=0.00, real=0.00 secs]
+[GC (Allocation Failure) [ParNew: 78466K->78466K(78656K), 0.0003809 secs][CMS: 172614K->174566K(174784K), 0.0313283 secs] 251081K->200728K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0356253 secs] [Times: user=0.03 sys=0.00, real=0.04 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 174566K(174784K)] 202342K(253440K), 0.0011035 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-preclean-start]
+[CMS-concurrent-preclean: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-abortable-preclean-start]
+[CMS-concurrent-abortable-preclean: 0.000/0.000 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[GC (CMS Final Remark) [YG occupancy: 49316 K (78656 K)][Rescan (parallel) , 0.0005497 secs][weak refs processing, 0.0001025 secs][class unloading, 0.0002935 secs][scrub symbol table, 0.0004121 secs][scrub string table, 0.0006420 secs][1 CMS-remark: 174566K(174784K)] 223882K(253440K), 0.0033109 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-sweep-start]
+[CMS-concurrent-sweep: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-reset-start]
+[GC (Allocation Failure) [ParNew: 78430K->78430K(78656K), 0.0003114 secs][CMS[CMS-concurrent-reset: 0.000/0.004 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+: 174491K->174753K(174784K), 0.0347893 secs] 252921K->212421K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0389430 secs] [Times: user=0.03 sys=0.00, real=0.04 secs]
+[Full GC (Allocation Failure) [CMS: 174753K->174772K(174784K), 0.0341514 secs] 253322K->216549K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0349578 secs] [Times: user=0.03 sys=0.00, real=0.04 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 174772K(174784K)] 218105K(253440K), 0.0011002 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-preclean-start]
+[CMS-concurrent-preclean: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-abortable-preclean-start]
+[CMS-concurrent-abortable-preclean: 0.000/0.000 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[GC (CMS Final Remark) [YG occupancy: 75661 K (78656 K)][Rescan (parallel) , 0.0005544 secs][weak refs processing, 0.0000785 secs][class unloading, 0.0002841 secs][scrub symbol table, 0.0004415 secs][scrub string table, 0.0005920 secs][1 CMS-remark: 174772K(174784K)] 250434K(253440K), 0.0029917 secs] [Times: user=0.02 sys=0.00, real=0.00 secs]
+[CMS-concurrent-sweep-start]
+[Full GC (Allocation Failure) [CMS[CMS-concurrent-sweep: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.01 secs]
+ (concurrent mode failure): 174772K->174765K(174784K), 0.0368826 secs] 253294K->217134K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0446148 secs] [Times: user=0.03 sys=0.00, real=0.05 secs]
+[Full GC (Allocation Failure) [CMS: 174765K->174549K(174784K), 0.0368932 secs] 253168K->226573K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0376423 secs] [Times: user=0.05 sys=0.00, real=0.04 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 174549K(174784K)] 227372K(253440K), 0.0013592 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-preclean-start]
+[Full GC (Allocation Failure) [CMS[CMS-concurrent-preclean: 0.001/0.002 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+ (concurrent mode failure): 174625K->174781K(174784K), 0.0364340 secs] 253219K->229571K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0375790 secs] [Times: user=0.03 sys=0.00, real=0.04 secs]
+[Full GC (Allocation Failure) [CMS: 174781K->174727K(174784K), 0.0375794 secs] 253366K->231761K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0382690 secs] [Times: user=0.03 sys=0.00, real=0.04 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 174727K(174784K)] 231905K(253440K), 0.0012796 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-preclean-start]
+[Full GC (Allocation Failure) [CMS[CMS-concurrent-preclean: 0.001/0.001 secs] [Times: user=0.03 sys=0.00, real=0.00 secs]
+ (concurrent mode failure): 174727K->174679K(174784K), 0.0347687 secs] 252887K->236862K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0354252 secs] [Times: user=0.03 sys=0.00, real=0.04 secs]
+[Full GC (Allocation Failure) [CMS: 174679K->174637K(174784K), 0.0352283 secs] 253125K->236886K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0360519 secs] [Times: user=0.03 sys=0.00, real=0.04 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 174637K(174784K)] 237909K(253440K), 0.0013752 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-preclean-start]
+[Full GC (Allocation Failure) [CMS[CMS-concurrent-preclean: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+ (concurrent mode failure): 174637K->174521K(174784K), 0.0372299 secs] 253258K->239057K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0379377 secs] [Times: user=0.03 sys=0.00, real=0.04 secs]
+[Full GC (Allocation Failure) [CMS: 174779K->174726K(174784K), 0.0374267 secs] 253434K->239097K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0381459 secs] [Times: user=0.05 sys=0.00, real=0.04 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 174726K(174784K)] 240781K(253440K), 0.0013942 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+[Full GC (Allocation Failure) [CMS[CMS-concurrent-mark: 0.001/0.015 secs] [Times: user=0.00 sys=0.00, real=0.02 secs]
+ (concurrent mode failure): 174726K->174458K(174784K), 0.0504134 secs] 253255K->242982K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0511164 secs] [Times: user=0.03 sys=0.00, real=0.05 secs]
+[Full GC (Allocation Failure) [CMS: 174458K->174717K(174784K), 0.0285687 secs] 252594K->244803K(253440K), [Metaspace: 2638K->2638K(1056768K)], 0.0292627 secs] [Times: user=0.02 sys=0.00, real=0.03 secs]
+[GC (CMS Initial Mark) [1 CMS-initial-mark: 174717K(174784K)] 245703K(253440K), 0.0014318 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-mark-start]
+执行结束!共生成对象次数:4314
+[CMS-concurrent-mark: 0.001/0.001 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+[CMS-concurrent-preclean-start]
+Heap
+ par new generation   total 78656K, used 70987K [0x00000000f0000000, 0x00000000f5550000, 0x00000000f5550000)
+  eden space 69952K, 100% used [0x00000000f0000000, 0x00000000f4450000, 0x00000000f4450000)
+  from space 8704K,  11% used [0x00000000f4450000, 0x00000000f4552d08, 0x00000000f4cd0000)
+  to   space 8704K,   0% used [0x00000000f4cd0000, 0x00000000f4cd0000, 0x00000000f5550000)
+ concurrent mark-sweep generation total 174784K, used 174717K [0x00000000f5550000, 0x0000000100000000, 0x0000000100000000)
+ Metaspace       used 2645K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 291K, capacity 386K, committed 512K, reserved 1048576K
+[CMS-concurrent-preclean: 0.001/0.001 secs]
+
+以上为CMS GC，堆内存配置-Xms256m -Xmx256m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+
+1、可以看到内存设定到256M之后，GC的频率显著提高，相比串行GC，CMS的GC效率体现得也较高，GC花费时间相对较短；
+2、与串、并行GC一样，由于内存的过小的局限，导致程序运行尾声GC的频率增加，并连续触发fullGC，但不同的是CMS GC并没有内存溢出；
+3、这说明更高的GC频率，牺牲了吞吐量，但是可以获得更低的延迟；
+
+------------------------------------------朴实分割线------------------------------------------------
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseConcMarkSweepGC -Xms4g -Xmx4g -XX:+PrintGCDetails GCLogAnalysis
+正在执行...
+[GC (Allocation Failure) [ParNew: 681600K->85183K(766784K), 0.0285097 secs] 681600K->164474K(4109120K), 0.0289198 secs] [Times: user=0.02 sys=0.30, real=0.03 secs]
+[GC (Allocation Failure) [ParNew: 766783K->85183K(766784K), 0.0405339 secs] 846074K->305201K(4109120K), 0.0408624 secs] [Times: user=0.25 sys=0.22, real=0.04 secs]
+[GC (Allocation Failure) [ParNew: 766783K->85182K(766784K), 0.0885446 secs] 986801K->445787K(4109120K), 0.0889046 secs] [Times: user=0.70 sys=0.08, real=0.09 secs]
+[GC (Allocation Failure) [ParNew: 766782K->85184K(766784K), 0.0929139 secs] 1127387K->588699K(4109120K), 0.0931748 secs] [Times: user=0.88 sys=0.06, real=0.09 secs]
+[GC (Allocation Failure) [ParNew: 766784K->85183K(766784K), 0.0987164 secs] 1270299K->730861K(4109120K), 0.0990242 secs] [Times: user=0.91 sys=0.03, real=0.10 secs]
+执行结束!共生成对象次数:12766
+Heap
+ par new generation   total 766784K, used 112490K [0x00000006c0000000, 0x00000006f4000000, 0x00000006f4000000)
+  eden space 681600K,   4% used [0x00000006c0000000, 0x00000006c1aaabf8, 0x00000006e99a0000)
+  from space 85184K,  99% used [0x00000006eecd0000, 0x00000006f3ffff20, 0x00000006f4000000)
+  to   space 85184K,   0% used [0x00000006e99a0000, 0x00000006e99a0000, 0x00000006eecd0000)
+ concurrent mark-sweep generation total 3342336K, used 645677K [0x00000006f4000000, 0x00000007c0000000, 0x00000007c0000000)
+ Metaspace       used 2645K, capacity 4486K, committed 4864K, reserved 1056768K
+  class space    used 291K, capacity 386K, committed 512K, reserved 1048576K
+
+以上为CMS GC，堆内存配置-Xms4g -Xmx4g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+
+1、4g内存下，CMS GC的频率同样非常低，GC的频率比并行GC高一些，GC暂停时间也差不多，GC效率上也是比较高的。
+2、同样由于内存充足，所以并没有触发fullGC；
+
+
+------------------------------------------朴实分割线------------------------------------------------
+##G1 GC打印日志分析
+
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseG1GC -Xms512m -Xmx512m  -XX:+PrintGC GCLogAnalysis
+正在执行...
+[GC pause (G1 Evacuation Pause) (young) 30M->12M(512M), 0.0044707 secs]
+[GC pause (G1 Evacuation Pause) (young) 41M->22M(512M), 0.0044125 secs]
+[GC pause (G1 Evacuation Pause) (young) 68M->40M(512M), 0.0049097 secs]
+[GC pause (G1 Evacuation Pause) (young) 117M->70M(512M), 0.0074809 secs]
+[GC pause (G1 Evacuation Pause) (young) 179M->103M(512M), 0.0078457 secs]
+[GC pause (G1 Evacuation Pause) (young) 320M->166M(512M), 0.0122240 secs]
+[GC pause (G1 Evacuation Pause) (young) 321M->205M(512M), 0.0137372 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 269M->224M(512M), 0.0077067 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0067446 secs]
+[GC concurrent-mark-start]
+[GC concurrent-mark-end, 0.0035202 secs]
+[GC remark, 0.0029216 secs]
+[GC cleanup 307M->306M(512M), 0.0019375 secs]
+[GC concurrent-cleanup-start]
+[GC concurrent-cleanup-end, 0.0000438 secs]
+[GC pause (G1 Evacuation Pause) (young) 405M->265M(512M), 0.0113856 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 270M->244M(512M), 0.0069013 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 264M->250M(512M), 0.0058378 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0008142 secs]
+[GC concurrent-mark-start]
+[GC concurrent-mark-end, 0.0086719 secs]
+[GC remark, 0.0035524 secs]
+[GC cleanup 342M->342M(512M), 0.0037115 secs]
+[GC pause (G1 Evacuation Pause) (young)-- 412M->318M(512M), 0.0103083 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 328M->301M(512M), 0.0111602 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 304M->301M(512M), 0.0038691 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0003993 secs]
+[GC concurrent-mark-start]
+[GC concurrent-mark-end, 0.0089127 secs]
+[GC remark, 0.0079256 secs]
+[GC cleanup 373M->373M(512M), 0.0033283 secs]
+[GC pause (G1 Evacuation Pause) (young) 415M->337M(512M), 0.0107652 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 352M->301M(512M), 0.0102003 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 330M->298M(512M), 0.0109383 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 299M->299M(512M), 0.0034417 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0002444 secs]
+[GC concurrent-mark-start]
+[GC concurrent-mark-end, 0.0114759 secs]
+[GC remark, 0.0029301 secs]
+[GC cleanup 372M->372M(512M), 0.0034419 secs]
+[GC pause (G1 Evacuation Pause) (young) 417M->330M(512M), 0.0078898 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 346M->310M(512M), 0.0123088 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 336M->318M(512M), 0.0081466 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 322M->319M(512M), 0.0034338 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0075838 secs]
+[GC concurrent-mark-start]
+[GC concurrent-mark-end, 0.0033016 secs]
+[GC remark, 0.0033088 secs]
+[GC cleanup 390M->390M(512M), 0.0080385 secs]
+[GC pause (G1 Evacuation Pause) (young) 421M->351M(512M), 0.0070092 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 373M->331M(512M), 0.0093279 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 363M->338M(512M), 0.0077704 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 339M->338M(512M), 0.0042563 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0079893 secs]
+[GC concurrent-mark-start]
+[GC pause (G1 Evacuation Pause) (young) 406M->360M(512M), 0.0144922 secs]
+[GC concurrent-mark-end, 0.0175045 secs]
+[GC remark, 0.0119918 secs]
+[GC cleanup 363M->363M(512M), 0.0030492 secs]
+[GC pause (G1 Evacuation Pause) (young) 401M->371M(512M), 0.0061433 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 395M->349M(512M), 0.0093725 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 377M->356M(512M), 0.0068121 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 356M->356M(512M), 0.0039634 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0005911 secs]
+[GC concurrent-mark-start]
+[GC pause (G1 Evacuation Pause) (young) 410M->372M(512M), 0.0050861 secs]
+[GC concurrent-mark-end, 0.0087279 secs]
+[GC remark, 0.0088723 secs]
+[GC cleanup 379M->379M(512M), 0.0039577 secs]
+[GC pause (G1 Evacuation Pause) (young) 404M->381M(512M), 0.0063010 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 406M->364M(512M), 0.0095858 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 392M->368M(512M), 0.0093224 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 370M->370M(512M), 0.0023484 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0057051 secs]
+[GC concurrent-mark-start]
+[GC pause (G1 Evacuation Pause) (young) 400M->377M(512M), 0.0172587 secs]
+[GC concurrent-mark-end, 0.0182066 secs]
+[GC remark, 0.0037582 secs]
+[GC cleanup 405M->405M(512M), 0.0033804 secs]
+[GC pause (G1 Evacuation Pause) (young) 406M->387M(512M), 0.0124809 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 411M->371M(512M), 0.0106947 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 398M->373M(512M), 0.0088521 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 379M->375M(512M), 0.0046159 secs]
+[GC concurrent-root-region-scan-start]
+[GC pause (G1 Evacuation Pause) (young)[GC concurrent-root-region-scan-end, 0.0075119 secs]
+[GC concurrent-mark-start]
+ 404M->382M(512M), 0.0083966 secs]
+[GC concurrent-mark-end, 0.0094591 secs]
+[GC remark, 0.0096085 secs]
+[GC cleanup 400M->400M(512M), 0.0033437 secs]
+[GC pause (G1 Evacuation Pause) (young) 408M->390M(512M), 0.0071724 secs]
+[GC pause (G1 Evacuation Pause) (mixed)-- 416M->389M(512M), 0.0107215 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 414M->395M(512M), 0.0063468 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 397M->395M(512M), 0.0087889 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0002657 secs]
+[GC concurrent-mark-start]
+[GC pause (G1 Evacuation Pause) (young) 427M->405M(512M), 0.0112329 secs]
+[GC concurrent-mark-end, 0.0168055 secs]
+[GC remark, 0.0099941 secs]
+[GC cleanup 424M->424M(512M), 0.0068833 secs]
+执行结束!共生成对象次数:7862
+
+以上为G1 GC，堆内存配置-Xms512m -Xmx512m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+
+1、观察G1 GC 日志，G1与CMS GC的流程较为相似，有较高的GC暂停频率和短暂的暂停时间的特点。
+
+------------------------------------------朴实分割线------------------------------------------------
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseG1GC -Xms1g -Xmx1g  -XX:+PrintGC GCLogAnalysis
+正在执行...
+[GC pause (G1 Evacuation Pause) (young) 62M->20M(1024M), 0.0059026 secs]
+[GC pause (G1 Evacuation Pause) (young) 79M->41M(1024M), 0.0076491 secs]
+[GC pause (G1 Evacuation Pause) (young) 96M->60M(1024M), 0.0063690 secs]
+[GC pause (G1 Evacuation Pause) (young) 145M->86M(1024M), 0.0084979 secs]
+[GC pause (G1 Evacuation Pause) (young) 377M->167M(1024M), 0.0127648 secs]
+[GC pause (G1 Evacuation Pause) (young) 264M->194M(1024M), 0.0102359 secs]
+[GC pause (G1 Evacuation Pause) (young) 387M->248M(1024M), 0.0125433 secs]
+[GC pause (G1 Evacuation Pause) (young) 517M->310M(1024M), 0.0138931 secs]
+[GC pause (G1 Evacuation Pause) (young) 622M->377M(1024M), 0.0179926 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 628M->432M(1024M), 0.0173575 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0008256 secs]
+[GC concurrent-mark-start]
+[GC concurrent-mark-end, 0.0025686 secs]
+[GC remark, 0.0032861 secs]
+[GC cleanup 458M->450M(1024M), 0.0042915 secs]
+[GC concurrent-cleanup-start]
+[GC concurrent-cleanup-end, 0.0001050 secs]
+[GC pause (G1 Evacuation Pause) (young)-- 858M->671M(1024M), 0.0144176 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 676M->589M(1024M), 0.0160502 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 596M->592M(1024M), 0.0019017 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0008742 secs]
+[GC concurrent-mark-start]
+[GC concurrent-mark-end, 0.0033997 secs]
+[GC remark, 0.0040423 secs]
+[GC cleanup 624M->616M(1024M), 0.0033910 secs]
+[GC concurrent-cleanup-start]
+[GC concurrent-cleanup-end, 0.0005114 secs]
+[GC pause (G1 Evacuation Pause) (young) 847M->648M(1024M), 0.0128801 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 675M->557M(1024M), 0.0089587 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 614M->490M(1024M), 0.0106502 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 544M->458M(1024M), 0.0092363 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 459M->458M(1024M), 0.0043832 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0059185 secs]
+[GC concurrent-mark-start]
+[GC concurrent-mark-end, 0.0111302 secs]
+[GC remark, 0.0022160 secs]
+[GC cleanup 593M->588M(1024M), 0.0108377 secs]
+[GC concurrent-cleanup-start]
+[GC concurrent-cleanup-end, 0.0000820 secs]
+[GC pause (G1 Evacuation Pause) (young)-- 894M->743M(1024M), 0.0089014 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 774M->673M(1024M), 0.0127400 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 724M->688M(1024M), 0.0065439 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 690M->689M(1024M), 0.0120972 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0008334 secs]
+[GC concurrent-mark-start]
+[GC concurrent-mark-end, 0.0047422 secs]
+[GC remark, 0.0094858 secs]
+[GC cleanup 767M->748M(1024M), 0.0035926 secs]
+[GC concurrent-cleanup-start]
+[GC concurrent-cleanup-end, 0.0031906 secs]
+[GC pause (G1 Evacuation Pause) (young) 840M->715M(1024M), 0.0092862 secs]
+执行结束!共生成对象次数:11741
+
+
+以上为G1 GC，堆内存配置-Xms1g -Xmx1g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+
+1、内存1g下，与CMS较为相似，因为内存足够大，所以GC的次数不多，内存余量充足，程序运行较为健康；
+2、同样的，暂停次数较多，暂停时间较短；
+
+------------------------------------------朴实分割线------------------------------------------------
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseG1GC -Xms256m -Xmx256m -XX:+PrintGC GCLogAnalysis
+正在执行...
+[GC pause (G1 Evacuation Pause) (young) 29M->10M(256M), 0.0045790 secs]
+[GC pause (G1 Evacuation Pause) (young) 37M->20M(256M), 0.0058563 secs]
+[GC pause (G1 Evacuation Pause) (young) 59M->34M(256M), 0.0055320 secs]
+[GC pause (G1 Evacuation Pause) (young) 130M->67M(256M), 0.0075773 secs]
+[GC pause (G1 Evacuation Pause) (young) 172M->103M(256M), 0.0068417 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 117M->107M(256M), 0.0053596 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0001845 secs]
+[GC concurrent-mark-start]
+[GC concurrent-mark-end, 0.0010296 secs]
+[GC remark, 0.0027329 secs]
+[GC cleanup 153M->153M(256M), 0.0028722 secs]
+[GC pause (G1 Evacuation Pause) (young) 195M->136M(256M), 0.0075734 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 137M->137M(256M), 0.0052828 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0021583 secs]
+[GC concurrent-mark-start]
+[GC concurrent-mark-end, 0.0016045 secs]
+[GC remark, 0.0023805 secs]
+[GC cleanup 164M->164M(256M), 0.0092342 secs]
+[GC pause (G1 Evacuation Pause) (young) 198M->156M(256M), 0.0071837 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 161M->149M(256M), 0.0060015 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 150M->150M(256M), 0.0095354 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0049843 secs]
+[GC concurrent-mark-start]
+[GC concurrent-mark-end, 0.0022902 secs]
+[GC pause (G1 Evacuation Pause) (young) 204M->167M(256M), 0.0116101 secs]
+[GC remark, 0.0022372 secs]
+[GC cleanup 167M->167M(256M), 0.0018847 secs]
+[GC pause (G1 Evacuation Pause) (young) 200M->176M(256M), 0.0052037 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 184M->172M(256M), 0.0065445 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 175M->174M(256M), 0.0035345 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0007170 secs]
+[GC concurrent-mark-start]
+[GC concurrent-mark-end, 0.0035331 secs]
+[GC pause (G1 Evacuation Pause) (young) 201M->180M(256M), 0.0131220 secs]
+[GC remark, 0.0031337 secs]
+[GC cleanup 182M->182M(256M), 0.0113494 secs]
+[GC pause (G1 Evacuation Pause) (young) 200M->187M(256M), 0.0052726 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 199M->185M(256M), 0.0059332 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 185M->185M(256M), 0.0033826 secs]
+[GC concurrent-root-region-scan-start]
+[GC pause (G1 Evacuation Pause) (young)[GC concurrent-root-region-scan-end, 0.0054577 secs]
+[GC concurrent-mark-start]
+ 201M->187M(256M), 0.0065034 secs]
+[GC concurrent-mark-end, 0.0065824 secs]
+[GC remark, 0.0103673 secs]
+[GC cleanup 197M->197M(256M), 0.0033121 secs]
+[GC pause (G1 Evacuation Pause) (young) 201M->192M(256M), 0.0036865 secs]
+[GC pause (G1 Evacuation Pause) (mixed) 206M->192M(256M), 0.0066153 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 198M->193M(256M), 0.0033539 secs]
+[GC concurrent-root-region-scan-start]
+[GC pause (G1 Evacuation Pause) (young)[GC concurrent-root-region-scan-end, 0.0042632 secs]
+[GC concurrent-mark-start]
+ 205M->198M(256M), 0.0059465 secs]
+[GC concurrent-mark-end, 0.0047665 secs]
+[GC pause (G1 Evacuation Pause) (young) 210M->201M(256M), 0.0064555 secs]
+[GC remark, 0.0021576 secs]
+[GC cleanup 202M->202M(256M), 0.0020201 secs]
+[GC pause (G1 Evacuation Pause) (young) 214M->203M(256M), 0.0049770 secs]
+[GC pause (G1 Evacuation Pause) (mixed)-- 215M->215M(256M), 0.0066018 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 221M->217M(256M), 0.0030318 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0007156 secs]
+[GC concurrent-mark-start]
+[GC pause (G1 Evacuation Pause) (young)-- 226M->223M(256M), 0.0112403 secs]
+[GC pause (G1 Humongous Allocation) (young)-- 226M->224M(256M), 0.0032584 secs]
+[GC pause (G1 Humongous Allocation) (young)-- 227M->226M(256M), 0.0080619 secs]
+[GC concurrent-mark-end, 0.0228677 secs]
+[GC pause (G1 Humongous Allocation) (young)-- 227M->227M(256M), 0.0102209 secs]
+[GC remark, 0.0023003 secs]
+[Full GC (Allocation Failure)  227M->180M(256M), 0.0268620 secs]
+[GC cleanup, 0.0003646 secs]
+[GC concurrent-mark-abort]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 187M->180M(256M), 0.0032932 secs]
+[GC concurrent-root-region-scan-start]
+[GC pause (G1 Evacuation Pause) (young)[GC concurrent-root-region-scan-end, 0.0032598 secs]
+[GC concurrent-mark-start]
+ 196M->186M(256M), 0.0034000 secs]
+[GC concurrent-mark-end, 0.0030742 secs]
+[GC remark, 0.0030263 secs]
+[GC cleanup 198M->198M(256M), 0.0033037 secs]
+[GC pause (G1 Evacuation Pause) (young) 198M->190M(256M), 0.0035897 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 192M->190M(256M), 0.0029132 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0007133 secs]
+[GC concurrent-mark-start]
+[GC pause (G1 Evacuation Pause) (young) 203M->194M(256M), 0.0037435 secs]
+[GC concurrent-mark-end, 0.0092053 secs]
+[GC pause (G1 Evacuation Pause) (young)-- 206M->200M(256M), 0.0087511 secs]
+[GC remark, 0.0025308 secs]
+[GC cleanup 201M->201M(256M), 0.0023388 secs]
+[GC pause (G1 Evacuation Pause) (young)-- 210M->210M(256M), 0.0083678 secs]
+[Full GC (Allocation Failure)  210M->186M(256M), 0.0270171 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 188M->186M(256M), 0.0038035 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0007369 secs]
+[GC concurrent-mark-start]
+[GC pause (G1 Evacuation Pause) (young) 201M->190M(256M), 0.0042823 secs]
+[GC concurrent-mark-end, 0.0066601 secs]
+[GC remark, 0.0030518 secs]
+[GC pause (G1 Evacuation Pause) (young)-- 203M->202M(256M), 0.0032994 secs]
+[GC cleanup 203M->203M(256M), 0.0040694 secs]
+[GC pause (G1 Evacuation Pause) (young)-- 204M->204M(256M), 0.0103707 secs]
+[Full GC (Allocation Failure)  204M->193M(256M), 0.0220374 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 196M->193M(256M), 0.0030199 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0006866 secs]
+[GC concurrent-mark-start]
+[GC pause (G1 Evacuation Pause) (young)-- 203M->201M(256M), 0.0040738 secs]
+[GC pause (G1 Humongous Allocation) (young)-- 204M->203M(256M), 0.0027499 secs]
+[GC pause (G1 Evacuation Pause) (young)-- 204M->203M(256M), 0.0110628 secs]
+[GC concurrent-mark-end, 0.0210861 secs]
+[GC pause (G1 Humongous Allocation) (young)-- 204M->204M(256M), 0.0031324 secs]
+[GC remark, 0.0020076 secs]
+[GC pause (G1 Evacuation Pause) (young) 205M->205M(256M), 0.0097055 secs]
+[GC pause (G1 Evacuation Pause) (young) 205M->205M(256M), 0.0022108 secs]
+[Full GC (Allocation Failure)  205M->197M(256M), 0.0173888 secs]
+[GC cleanup, 0.0001199 secs]
+[GC concurrent-mark-abort]
+[GC pause (G1 Evacuation Pause) (young)-- 204M->201M(256M), 0.0118536 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 202M->202M(256M), 0.0019535 secs]
+[GC concurrent-root-region-scan-start]
+[GC pause (G1 Evacuation Pause) (young)[GC concurrent-root-region-scan-end, 0.0052464 secs]
+[GC concurrent-mark-start]
+-- 203M->203M(256M), 0.0093524 secs]
+[Full GC (Allocation Failure)  203M->199M(256M), 0.0047586 secs]
+[GC concurrent-mark-abort]
+[GC pause (G1 Evacuation Pause) (young)-- 204M->201M(256M), 0.0088314 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark)-- 203M->203M(256M), 0.0029081 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0005174 secs]
+[GC concurrent-mark-start]
+[GC pause (G1 Humongous Allocation) (young) 203M->203M(256M), 0.0115690 secs]
+[Full GC (Allocation Failure)  203M->199M(256M), 0.0097838 secs]
+[GC concurrent-mark-abort]
+[GC pause (G1 Evacuation Pause) (young)-- 204M->202M(256M), 0.0123033 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark)-- 204M->204M(256M), 0.0023216 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0043159 secs]
+[GC concurrent-mark-start]
+[GC pause (G1 Humongous Allocation) (young) 204M->204M(256M), 0.0103942 secs]
+[Full GC (Allocation Failure)  204M->200M(256M), 0.0205576 secs]
+[GC concurrent-mark-abort]
+[GC pause (G1 Evacuation Pause) (young)-- 204M->203M(256M), 0.0128961 secs]
+[GC pause (G1 Humongous Allocation) (young) (initial-mark) 204M->203M(256M), 0.0023518 secs]
+[GC concurrent-root-region-scan-start]
+[GC pause (G1 Evacuation Pause) (young)[GC concurrent-root-region-scan-end, 0.0046825 secs]
+[GC concurrent-mark-start]
+-- 204M->204M(256M), 0.0086465 secs]
+[GC pause (G1 Evacuation Pause) (young) 204M->204M(256M), 0.0019821 secs]
+[Full GC (Allocation Failure)  204M->201M(256M), 0.0278312 secs]
+[GC concurrent-mark-abort]
+[GC pause (G1 Humongous Allocation) (young)-- 204M->204M(256M), 0.0093280 secs]
+[Full GC (Allocation Failure)  204M->202M(256M), 0.0053141 secs]
+[GC pause (G1 Evacuation Pause) (young) (initial-mark)-- 204M->203M(256M), 0.0108808 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0004874 secs]
+[GC concurrent-mark-start]
+[GC pause (G1 Evacuation Pause) (young)-- 204M->204M(256M), 0.0054386 secs]
+[Full GC (Allocation Failure)  204M->202M(256M), 0.0126136 secs]
+[GC concurrent-mark-abort]
+[GC pause (G1 Evacuation Pause) (young)-- 203M->203M(256M), 0.0030528 secs]
+[Full GC (Allocation Failure)  203M->203M(256M), 0.0037792 secs]
+[GC pause (G1 Evacuation Pause) (young)-- 204M->204M(256M), 0.0044021 secs]
+[Full GC (Allocation Failure)  204M->203M(256M), 0.0113525 secs]
+[Full GC (Allocation Failure)  203M->203M(256M), 0.0042929 secs]
+[GC pause (G1 Evacuation Pause) (young) 203M->203M(256M), 0.0109337 secs]
+[GC pause (G1 Evacuation Pause) (young) (initial-mark) 203M->203M(256M), 0.0027218 secs]
+[GC concurrent-root-region-scan-start]
+[GC concurrent-root-region-scan-end, 0.0005263 secs]
+[GC concurrent-mark-start]
+[Full GC (Allocation Failure)  203M->623K(256M), 0.0166093 secs]
+Exception in thread "main" [GC concurrent-mark-abort]
+java.lang.OutOfMemoryError: Java heap space
+        at GCLogAnalysis.generateGarbage(GCLogAnalysis.java:48)
+        at GCLogAnalysis.main(GCLogAnalysis.java:25)
+		
+		
+		
+		
+以上为G1 GC，堆内存配置-Xms256m -Xmx256m 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+
+1、可以看到内存设定到256M之后，GC的频率显著提高，同样效率也较高，GC花费时间相对较短；
+2、由于内存的过小的局限，导致程序运行尾声GC的频率增加，并连续触发fullGC, 后续GC的效果甚微，后面终于溢出报错。
+
+------------------------------------------朴实分割线------------------------------------------------
+D:\zhangqiaohui\learning\JavaEnhanceTraining\week2\homeworkOfweek2>java -XX:+UseG1GC -Xms4g -Xmx4g  -XX:+PrintGC GCLogAnalysis
+正在执行...
+[GC pause (G1 Evacuation Pause) (young) 204M->63M(4096M), 0.0130947 secs]
+[GC pause (G1 Evacuation Pause) (young) 241M->118M(4096M), 0.0164775 secs]
+[GC pause (G1 Evacuation Pause) (young) 296M->170M(4096M), 0.0178457 secs]
+[GC pause (G1 Evacuation Pause) (young) 348M->226M(4096M), 0.0171592 secs]
+[GC pause (G1 Evacuation Pause) (young) 404M->286M(4096M), 0.0149483 secs]
+[GC pause (G1 Evacuation Pause) (young) 464M->345M(4096M), 0.0174799 secs]
+[GC pause (G1 Evacuation Pause) (young) 523M->394M(4096M), 0.0195473 secs]
+[GC pause (G1 Evacuation Pause) (young) 602M->465M(4096M), 0.0178956 secs]
+[GC pause (G1 Evacuation Pause) (young) 689M->536M(4096M), 0.0192373 secs]
+[GC pause (G1 Evacuation Pause) (young) 844M->629M(4096M), 0.0236193 secs]
+[GC pause (G1 Evacuation Pause) (young) 973M->724M(4096M), 0.0281885 secs]
+[GC pause (G1 Evacuation Pause) (young) 1114M->834M(4096M), 0.0326469 secs]
+[GC pause (G1 Evacuation Pause) (young) 1290M->951M(4096M), 0.0338955 secs]
+[GC pause (G1 Evacuation Pause) (young) 1523M->1093M(4096M), 0.0422127 secs]
+执行结束!共生成对象次数:13888
+
+以上为G1 GC，堆内存配置-Xms4g -Xmx4g 下运行GCLogAnalysis.java测试类打印出来的GC日志，根据日志总结出以下几点；
+
+1、4g内存下，G1 GC的频率同样不高，但是相比CMS和并行GC，频率要高上不少，同时暂停时间相对短很多，说明效率上也比较高。
+2、同样由于内存充足，所以并没有触发fullGC；
+3、可以看出，如果内存比较大，同时对于GC时间的均匀分布上有偏好，可以选择G1 GC；
+
+
