@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    ##写
+    update:
+      jdbc-url: jdbc:mysql://localhost:3316/db
+      driver-class-name: com.mysql.jdbc.Driver
+      username: root
+      password:
+    ##读
+    select:
+      jdbc-url: jdbc:mysql://localhost:3326/db
+      driver-class-name: com.mysql.jdbc.Driver
+      username: root
+      password:
+    type: com.alibaba.druid.pool.DruidDataSource
