@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="week8.homework.mapper2.TeacherMapper">
+
+    <resultMap id="BaseResultMap" type="week8.homework.entity.Teacher">
+        <result column="id" jdbcType="INTEGER" property="id" />
+        <result column="name" jdbcType="VARCHAR" property="userName" />
+        <result column="age" jdbcType="INTEGER" property="age" />
+    </resultMap>
+
+    <insert id="saveTeacher" parameterType="week8.homework.entity.Teacher" useGeneratedKeys="true">
+        insert into teacher(name,age) values (#{name},#{age})
+    </insert>
+
+</mapper>
